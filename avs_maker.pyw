@@ -51,7 +51,7 @@ except Exception:
 HAS_PREVIEW = HAS_IMG and HAS_TKIMG
 
 APP_TITLE = "AVS かんたん作成ツール"
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.3.1"
 
 # 更新の確認先（GitHub）。version.json に最新の版番号と変更内容、avs_maker.pyw に本体を置く
 UPDATE_REPO = "tatata17/avs-maker"
@@ -2430,6 +2430,36 @@ class App:
                               "区間名をダブルクリックすると、その区間の開始位置へ移動します。")
         ToolTip(self.preview, "今の設定で作られる avs の中身です（一覧で選んだ動画の分）。")
 
+    # ---------- プレビューの大きさ
+    def schedule_fit_preview(self):
+        if self._pv_job:
+            self.root.after_cancel(self._pv_job)
+        self._pv_job = self.root.after(120, self.fit_preview)
+
+    def fit_preview(self):
+        """右の列の空いている高さと、ウインドウの幅に合わせて、プレビューをできるだけ大きくする"""
+        self._pv_job = None
+        try:
+            avail_h = self.rcol.canvas.winfo_height()
+            if avail_h < 50:
+                return
+            other = self.right.winfo_reqheight() - self.pv_holder.winfo_reqheight()
+            h_by_height = avail_h - other - 6
+            w_by_width = self.root.winfo_width() - 1120          # 左の列の設定が隠れない幅を残す
+            w = min(int(h_by_height * 4 / 3), w_by_width, 960)
+            w = max(w, 320)
+            h = int(w * 3 / 4)
+            if abs(w - self.pv_w) < 6 and abs(h - self.pv_h) < 6:
+                return
+            self.pv_w, self.pv_h = w, h
+            self.pv_holder.config(width=w, height=h)
+            self.img_label.config(wraplength=w - 40)
+            self.note.config(wraplength=w)
+            self.render_preview()
+            self.root.after_idle(self.fit_main)
+        except (tk.TclError, AttributeError):
+            pass
+
     # ---------- ③④ をたたむ
     def toggle_enc(self):
         self.vars["show_enc"].set(not self.vars["show_enc"].get())
@@ -2759,10 +2789,13 @@ class App:
         f5 = ttk.LabelFrame(self.right, text="画像プレビュー（補正のかかり具合）")
         f5.pack(fill="x")
 
-        holder = tk.Frame(f5, width=PREVIEW_MAX_W, height=PREVIEW_MAX_H, bg="#222")
+        self.pv_w, self.pv_h = PREVIEW_MAX_W, PREVIEW_MAX_H    # 画面の大きさに合わせて、あとで広げる
+        self._pv_job = None
+        holder = tk.Frame(f5, width=self.pv_w, height=self.pv_h, bg="#222")
         holder.pack_propagate(False)
         holder.pack(padx=8, pady=(8, 4))
-        self.img_label = tk.Label(holder, bg="#222", fg="#ccc", wraplength=PREVIEW_MAX_W - 40,
+        self.pv_holder = holder
+        self.img_label = tk.Label(holder, bg="#222", fg="#ccc", wraplength=self.pv_w - 40,
                                   justify="center", cursor="hand2", takefocus=True)
         self.img_label.pack(expand=True)
         self.img_label.bind("<ButtonPress-1>", self._on_img_press)
@@ -2804,24 +2837,12 @@ class App:
         ttk.Button(srow, text="◀ 1コマ", width=8, command=lambda: self.step(-1)).pack(side="left", padx=2)
         ttk.Button(srow, text="1コマ ▶", width=8, command=lambda: self.step(+1)).pack(side="left", padx=2)
         ttk.Button(srow, text="1秒 ▶▶", width=8, command=lambda: self.step(+1, True)).pack(side="left", padx=2)
+        ttk.Button(srow, text="この場面を取り直す", command=lambda: self.load_frame(force=True)
+                   ).pack(side="left", padx=(10, 0))
 
-        self.note = ttk.Label(f5, text="", foreground="#b00020", wraplength=PREVIEW_MAX_W)
-        self.note.pack(fill="x", padx=8, pady=2)
-
-        crow = ttk.Frame(f5)
-        crow.pack(fill="x", padx=8, pady=(2, 8))
-        ttk.Button(crow, text="この場面を取り直す", command=lambda: self.load_frame(force=True)
-                   ).pack(side="left", padx=(0, 10))
-        ttk.Label(crow, text="比較画像:").pack(side="left")
-        self.b_cmp_copy = ttk.Button(crow, text="コピー", command=self.copy_compare)
-        self.b_cmp_copy.pack(side="left", padx=4)
-        self.b_cmp_save = ttk.Button(crow, text="保存…", command=self.save_compare)
-        self.b_cmp_save.pack(side="left")
-        if not HAS_PREVIEW:
-            self.b_cmp_copy.config(state="disabled")
-            self.b_cmp_save.config(state="disabled")
-        elif os.name != "nt":
-            self.b_cmp_copy.config(state="disabled")
+        self.note = ttk.Label(f5, text="", foreground="#b00020", wraplength=self.pv_w)
+        self.note.pack(fill="x", padx=8, pady=(0, 6))
+        self.root.bind("<Configure>", lambda e: self.schedule_fit_preview(), add="+")
 
         if not HAS_PREVIEW:
             self.set_message("プレビュー・カット編集を使うには、コマンドプロンプトで\n"
@@ -2844,8 +2865,19 @@ class App:
         sb.pack(side="left", fill="y")
         self.marklist.bind("<<ListboxSelect>>", lambda e: self.goto_mark())
         self.marklist.bind("<Delete>", lambda e: self.delete_mark())
-        crow = ttk.Frame(f); crow.pack(fill="x", padx=8, pady=(2, 8))
-        ttk.Label(crow, text="覚えた場面の比較画像：").pack(side="left")
+        nrow = ttk.Frame(f); nrow.pack(fill="x", padx=8, pady=(4, 0))
+        ttk.Label(nrow, text="今の場面の比較画像：", width=20).pack(side="left")
+        self.b_cmp_copy = ttk.Button(nrow, text="コピー", command=self.copy_compare)
+        self.b_cmp_copy.pack(side="left", padx=4)
+        self.b_cmp_save = ttk.Button(nrow, text="保存…", command=self.save_compare)
+        self.b_cmp_save.pack(side="left")
+        if not HAS_PREVIEW:
+            self.b_cmp_copy.config(state="disabled")
+            self.b_cmp_save.config(state="disabled")
+        elif os.name != "nt":
+            self.b_cmp_copy.config(state="disabled")
+        crow = ttk.Frame(f); crow.pack(fill="x", padx=8, pady=(4, 8))
+        ttk.Label(crow, text="覚えた場面の比較画像：", width=20).pack(side="left")
         self.b_mcopy = ttk.Button(crow, text="まとめてコピー", command=lambda: self.batch_compare("copy"))
         self.b_mcopy.pack(side="left", padx=4)
         self.b_msave = ttk.Button(crow, text="まとめて保存…", command=lambda: self.batch_compare("save"))
@@ -3485,10 +3517,11 @@ class App:
             return
         o = self.options()
         aspect = display_aspect(self.raw.width, self.raw.height, o)
-        if aspect >= PREVIEW_MAX_W / PREVIEW_MAX_H:
-            w, h = PREVIEW_MAX_W, int(PREVIEW_MAX_W / aspect)
+        pw, ph = self.pv_w, self.pv_h
+        if aspect >= pw / ph:
+            w, h = pw, int(pw / aspect)
         else:
-            w, h = int(PREVIEW_MAX_H * aspect), PREVIEW_MAX_H
+            w, h = int(ph * aspect), ph
         base = self.raw.resize((max(w, 1), max(h, 1)), Image.BILINEAR)
         self.before_img = ImageTk.PhotoImage(base)
         msg, color = "", "#666"
@@ -3496,7 +3529,7 @@ class App:
             after = Image.fromarray(simulate(np.asarray(base), o))
             self.after_img = ImageTk.PhotoImage(after)
             if o["ccd"]:
-                msg = "※CCD（色ノイズ除去）の効果は、このプレビューには出ません"
+                msg = "※CCD の効果はプレビューには出ません"
         except ValueError as e:
             self.after_img = self.before_img
             msg, color = f"設定にまちがいがあります：{e}", "#b00020"
