@@ -51,7 +51,7 @@ except Exception:
 HAS_PREVIEW = HAS_IMG and HAS_TKIMG
 
 APP_TITLE = "AVS かんたん作成ツール"
-APP_VERSION = "1.2.1"
+APP_VERSION = "1.3.0"
 
 # 更新の確認先（GitHub）。version.json に最新の版番号と変更内容、avs_maker.pyw に本体を置く
 UPDATE_REPO = "tatata17/avs-maker"
@@ -91,6 +91,7 @@ DEFAULTS = {
     "out_mode": "same",   # same = 動画と同じ場所 / folder = 指定フォルダ
     "out_dir": "",
     "cq": "20",           # エンコードの画質（小さいほど高画質）
+    "show_enc": False,    # ③④（保存先・エンコード）の欄を開いておくか（ffmpeg が見つからないときは自動で開く）
     # ffmpegの場所の初期値（初回起動時だけ使う。変えると、次からは変えた場所が使われる）
     "ffmpeg": r"C:\ffmpeg\ffmpegNEW.exe",     # 通常用（AviSynth Neo を読む側）
     "ffmpeg24": r"C:\ffmpeg\NEW\ffmpeg.exe",  # 24p用（AviSynth+ 3.7.5 の avisynth.dll と同じフォルダ）
@@ -1607,7 +1608,6 @@ TIPS_BY_TEXT = {
     "この場面を取り直す":
         "今の位置の1コマを、動画から読み直します。表示がおかしい・真っ黒なときに押してください\n"
         "（動画の長さを調べられていなければ、調べ直します）。",
-    "ffmpegの場所を指定…": "プレビュー用の ffmpeg.exe を選びます（「通常用ffmpeg」の欄と同じ設定です）。",
     "補正アシスタント…": "別ウインドウで、覚えた場面を大きく表示して補正を詰めます（上級者向け）。\n"
                           "・白飛び・黒潰れを場面ごとに判定し、潰れている所を色で表示\n"
                           "・全部の場面で潰れにくい「入力 黒」「入力 白」のおすすめ値\n"
@@ -2268,6 +2268,52 @@ class AssistWindow:
 
 
 # ---------------------------------------------------------------- GUI
+class ScrollColumn:
+    """縦にスクロールできる列。中身が収まるときはスクロールバーを出さない。
+    fill_width=True なら幅は枠いっぱい、False なら中身の幅に合わせる"""
+
+    def __init__(self, parent, bg, fill_width):
+        self.fill_width = fill_width
+        self.outer = ttk.Frame(parent)
+        self.canvas = tk.Canvas(self.outer, highlightthickness=0, borderwidth=0, background=bg)
+        self.vsb = ttk.Scrollbar(self.outer, orient="vertical", command=self.canvas.yview)
+        self.canvas.configure(yscrollcommand=self.vsb.set)
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.vsb_shown = False
+        self.inner = ttk.Frame(self.canvas)
+        self.win = self.canvas.create_window((0, 0), window=self.inner, anchor="nw")
+        self.canvas.bind("<Configure>", lambda e: self.fit())
+        self.inner.bind("<Configure>", lambda e: self.fit())
+
+    def fit(self):
+        try:
+            c = self.canvas
+            need_h, need_w = self.inner.winfo_reqheight(), self.inner.winfo_reqwidth()
+            if not self.fill_width and int(c.cget("width")) != need_w:
+                c.configure(width=need_w)
+            w, h = c.winfo_width(), c.winfo_height()
+            w = max(w if self.fill_width else need_w, 1)
+            c.itemconfigure(self.win, width=w, height=max(h, need_h))
+            c.configure(scrollregion=(0, 0, w, max(h, need_h)))
+            want = need_h > h > 1
+            if want != self.vsb_shown:
+                self.vsb_shown = want
+                if want:
+                    self.vsb.pack(side="right", fill="y", before=c)
+                else:
+                    self.vsb.pack_forget()
+                    c.yview_moveto(0)
+        except tk.TclError:
+            pass
+
+    def owns(self, widget):
+        return str(widget).startswith(str(self.canvas))
+
+    def scroll(self, delta):
+        if self.inner.winfo_reqheight() > self.canvas.winfo_height():
+            self.canvas.yview_scroll(-1 if delta > 0 else 1, "units")
+
+
 class App:
     def __init__(self, root):
         self.root = root
@@ -2275,10 +2321,10 @@ class App:
         # 画面に収まる大きさにする（ノートPCなど、画面が低くても下のボタンが隠れないように）
         global PREVIEW_MAX_W, PREVIEW_MAX_H
         sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
-        ww, wh = min(1340, sw - 30), min(980, sh - 110)
+        ww, wh = min(1720, sw - 30), min(980, sh - 110)   # 左の列（設定）と右の列（プレビュー）が並んで収まる幅
         root.geometry(f"{ww}x{wh}+10+10")
         root.minsize(min(1000, ww), min(600, wh))
-        PREVIEW_MAX_H = max(220, min(360, wh - 640))      # 低い画面では、プレビュー画像を小さくする
+        PREVIEW_MAX_H = max(200, min(360, wh - 640))      # 低い画面では、プレビュー画像を小さくする
         PREVIEW_MAX_W = int(PREVIEW_MAX_H * 4 / 3)
 
         self.files = []
@@ -2378,39 +2424,54 @@ class App:
         ToolTip(self.img_label, "押している間は「補正前」、離すと「補正後（Levels/Tweakの見本）」を表示します。\n"
                                 "押したあとは ←→ キーで1コマ、Shift+←→ で1秒移動できます。")
         ToolTip(self.scale, "動画の中の位置です。動かして離すと、その場面を表示します。")
-        ToolTip(self.seglist, "残す区間のリストです。\n"
+        ToolTip(self.seglist, "残す区間のリストです。開始点だけ決めて追加＝そこから最後まで／終了点だけ＝先頭からそこまで。\n"
                               "左端の □ を押すと、その区間だけ 24p化（QTGMC＋SRestore）が ☑ オン／□ オフになります。\n"
                               "下から上に流れる文字（警告文・スクロールするクレジット）の区間はオフのまま（59.94p）にします。\n"
                               "区間名をダブルクリックすると、その区間の開始位置へ移動します。")
         ToolTip(self.preview, "今の設定で作られる avs の中身です（一覧で選んだ動画の分）。")
 
+    # ---------- ③④ をたたむ
+    def toggle_enc(self):
+        self.vars["show_enc"].set(not self.vars["show_enc"].get())
+        self.apply_enc_visible()
+
+    def apply_enc_visible(self):
+        show = bool(self.vars["show_enc"].get())
+        self.b_enc_toggle.config(text="▼" if show else "▶")
+        if show:
+            self.enc_body.pack(fill="x")
+        else:
+            self.enc_body.pack_forget()
+        self.update_enc_summary()
+        self.root.after_idle(self.fit_main)
+
+    def update_enc_summary(self):
+        if not hasattr(self, "enc_summary"):
+            return
+        v = self.vars
+        if v["show_enc"].get():
+            self.enc_summary.config(text="（▼ を押すとたためます）")
+            return
+        where = "動画と同じフォルダ" if v["out_mode"].get() == "same" else (v["out_dir"].get() or "（フォルダ未指定）")
+        nff = sum(1 for k in ("ffmpeg", "ffmpeg24") if v[k].get() and os.path.isfile(v[k].get()))
+        self.enc_summary.config(text=f"保存先：{where} ／ CQ {v['cq'].get()} ／ ffmpeg {nff}/2 指定済み")
+
     # ---------- 画面づくり
     def fit_main(self):
-        """本体の幅は窓に合わせ、高さは中身が収まる大きさ（窓より低ければ窓いっぱい）にする"""
-        try:
-            w, h = self.canvas.winfo_width(), self.canvas.winfo_height()
-            need = self.main.winfo_reqheight()
-            self.canvas.itemconfigure(self._win, width=max(w, 1), height=max(h, need))
-            self.canvas.configure(scrollregion=(0, 0, max(w, 1), max(h, need)))
-            want = need > h > 1
-            if want != self.vsb_shown:
-                self.vsb_shown = want
-                if want:
-                    self.vsb.pack(side="right", fill="y", before=self.canvas)
-                else:
-                    self.vsb.pack_forget()
-        except Exception:
-            pass
+        self.lcol.fit()
+        self.rcol.fit()
 
     def on_main_wheel(self, event):
-        """数字欄・リスト・スライダーの上以外でホイールを回すと、画面全体を上下にスクロール"""
+        """マウスのある列だけを上下にスクロールする（数字欄・リスト・スライダーの上は除く）"""
         try:
             cls = event.widget.winfo_class()
             if cls in ("Spinbox", "TSpinbox", "Entry", "TEntry", "TCombobox", "Text",
                        "Treeview", "Listbox", "TScale", "Scale"):
                 return
-            if self.main.winfo_reqheight() > self.canvas.winfo_height():
-                self.canvas.yview_scroll(-1 if event.delta > 0 else 1, "units")
+            for col in (self.lcol, self.rcol):
+                if col.owns(event.widget):
+                    col.scroll(event.delta)
+                    return
         except Exception:
             pass
 
@@ -2427,29 +2488,25 @@ class App:
         bottom = ttk.Frame(root)
         bottom.pack(side="bottom", fill="x", padx=10, pady=(2, 10))
 
-        # その上の本体は、画面に収まらないときは縦にスクロールできるようにする
         holder = ttk.Frame(root)
         holder.pack(side="top", fill="both", expand=True)
         try:
             bg = ttk.Style().lookup("TFrame", "background") or "#f0f0f0"
         except Exception:
             bg = "#f0f0f0"
-        self.canvas = tk.Canvas(holder, highlightthickness=0, borderwidth=0, background=bg)
-        self.vsb = ttk.Scrollbar(holder, orient="vertical", command=self.canvas.yview)
-        self.canvas.configure(yscrollcommand=self.vsb.set)
-        self.canvas.pack(side="left", fill="both", expand=True)
-        self.vsb_shown = False
-        main = ttk.Frame(self.canvas)
-        self.main = main
-        self._win = self.canvas.create_window((0, 0), window=main, anchor="nw")
-        self.canvas.bind("<Configure>", lambda e: self.fit_main())
-        main.bind("<Configure>", lambda e: self.fit_main())
+        # 左の列（動画・設定）と右の列（プレビュー・場面・カット編集）は、別々にスクロールする。
+        # 右の列は、ふつうの画面なら全部収まるので、スクロールバーは出ない
+        self.rcol = ScrollColumn(holder, bg, fill_width=False)
+        self.rcol.outer.pack(side="right", fill="y", padx=(0, 10), pady=5)
+        self.lcol = ScrollColumn(holder, bg, fill_width=True)
+        self.lcol.outer.pack(side="left", fill="both", expand=True)
+        self.canvas, self.main = self.lcol.canvas, self.lcol.inner
+        self.right = self.rcol.inner
         root.bind_all("<MouseWheel>", self.on_main_wheel, add="+")
+        main = self.main
 
         self.left = ttk.Frame(main)
         self.left.pack(side="left", fill="both", expand=True)
-        self.right = ttk.Frame(main)
-        self.right.pack(side="right", fill="y", padx=(0, 10), pady=5)
         left = self.left
 
         # --- 1. ファイル一覧
@@ -2614,9 +2671,22 @@ class App:
         ttk.Label(f2, text="※数字の欄は、クリックして ↑↓キー（Shiftで5倍）かマウスホイールで増減できます。",
                   foreground="#666").grid(row=r, column=0, columnspan=3, sticky="w", padx=8, pady=(0, 8))
 
-        # --- 3. 保存先
-        f3 = ttk.LabelFrame(left, text="③ avsとmp4の保存先")
-        f3.pack(fill="x", **pad)
+        # --- 3・4. 保存先とエンコード（一度決めたらあまり触らないので、たためるようにする）
+        enc_box = ttk.Frame(left)
+        enc_box.pack(fill="x", padx=10, pady=(5, 0))
+        ehead = ttk.Frame(enc_box)
+        ehead.pack(fill="x")
+        self.b_enc_toggle = ttk.Button(ehead, width=3, command=self.toggle_enc)
+        self.b_enc_toggle.pack(side="left")
+        ttk.Label(ehead, text="③ 保存先・④ エンコード（画質・ffmpeg の場所）",
+                  font=self.font_bold).pack(side="left", padx=(6, 0))
+        self.enc_summary = ttk.Label(ehead, text="", foreground="#666")
+        self.enc_summary.pack(side="left", padx=(12, 0))
+        self.enc_body = ttk.Frame(enc_box)
+        epad = {"padx": 0, "pady": 5}
+
+        f3 = ttk.LabelFrame(self.enc_body, text="③ avsとmp4の保存先")
+        f3.pack(fill="x", **epad)
         ttk.Radiobutton(f3, text="動画と同じフォルダに保存", value="same",
                         variable=v["out_mode"]).grid(row=0, column=0, sticky="w", padx=8, pady=3)
         ttk.Radiobutton(f3, text="このフォルダに保存：", value="folder",
@@ -2628,8 +2698,8 @@ class App:
         f3.columnconfigure(1, weight=1)
 
         # --- 4. エンコード設定
-        f_enc = ttk.LabelFrame(left, text="④ エンコード（ffmpeg → mp4）")
-        f_enc.pack(fill="x", **pad)
+        f_enc = ttk.LabelFrame(self.enc_body, text="④ エンコード（ffmpeg → mp4）")
+        f_enc.pack(fill="x", **epad)
         row = ttk.Frame(f_enc); row.pack(fill="x", padx=8, pady=(6, 2))
         ttk.Label(row, text="画質 CQ").pack(side="left")
         self.e_cq = make_spin(row, v["cq"], 1, 0, 51, 0, width=5)
@@ -2646,6 +2716,10 @@ class App:
                               "24p化する部分を含む動画は、通常の部分もQTGMCで処理して、1本のavsでエンコードします。",
                   foreground="#666", justify="left").pack(anchor="w", padx=8, pady=(2, 6))
 
+        if not all(v[k].get() and os.path.isfile(v[k].get()) for k in ("ffmpeg", "ffmpeg24")):
+            v["show_enc"].set(True)          # ffmpeg の場所が決まっていないうちは、開いておく
+        self.apply_enc_visible()
+
         # --- 5. avsの中身
         f4 = ttk.LabelFrame(left, text="作られるavsの中身（一覧で選んだファイルの分）")
         f4.pack(fill="both", expand=True, **pad)
@@ -2655,6 +2729,8 @@ class App:
 
         self.build_bottom(bottom)
         self.build_image_preview()
+        self.tabs = ttk.Notebook(self.right)
+        self.tabs.pack(fill="both", expand=True, pady=(8, 0))
         self.build_marks_panel()
         self.build_cut_panel()
 
@@ -2698,9 +2774,7 @@ class App:
         self.img_label.bind("<Shift-Right>", lambda e: self.step(+1, True))
 
         self.state_label = ttk.Label(f5, text="", font=self.font_bold)
-        self.state_label.pack()
-        ttk.Label(f5, text="画像を押している間は「補正前」を表示／押したあと ←→キーで1コマ、Shift+←→で1秒移動",
-                  foreground="#666", wraplength=PREVIEW_MAX_W).pack(pady=(0, 6))
+        self.state_label.pack(pady=(0, 2))
 
         trow = ttk.Frame(f5)
         trow.pack(fill="x", padx=8, pady=2)
@@ -2734,16 +2808,11 @@ class App:
         self.note = ttk.Label(f5, text="", foreground="#b00020", wraplength=PREVIEW_MAX_W)
         self.note.pack(fill="x", padx=8, pady=2)
 
-        brow = ttk.Frame(f5)
-        brow.pack(fill="x", padx=8, pady=(2, 8))
-        ttk.Button(brow, text="この場面を取り直す", command=lambda: self.load_frame(force=True)
-                   ).pack(side="left")
-        ttk.Button(brow, text="ffmpegの場所を指定…", command=self.choose_ffmpeg
-                   ).pack(side="right")
-
         crow = ttk.Frame(f5)
-        crow.pack(fill="x", padx=8, pady=(0, 8))
-        ttk.Label(crow, text="比較画像（左＝補正前／右＝補正後）:").pack(side="left")
+        crow.pack(fill="x", padx=8, pady=(2, 8))
+        ttk.Button(crow, text="この場面を取り直す", command=lambda: self.load_frame(force=True)
+                   ).pack(side="left", padx=(0, 10))
+        ttk.Label(crow, text="比較画像:").pack(side="left")
         self.b_cmp_copy = ttk.Button(crow, text="コピー", command=self.copy_compare)
         self.b_cmp_copy.pack(side="left", padx=4)
         self.b_cmp_save = ttk.Button(crow, text="保存…", command=self.save_compare)
@@ -2761,8 +2830,8 @@ class App:
             self.set_message("動画を追加すると、ここに1コマ表示されます")
 
     def build_marks_panel(self):
-        f = ttk.LabelFrame(self.right, text="チェックする場面（同じ場面をすぐ見直す用）")
-        f.pack(fill="x", pady=(8, 0))
+        f = ttk.Frame(self.tabs)
+        self.tabs.add(f, text="チェックする場面")
         row = ttk.Frame(f); row.pack(fill="x", padx=8, pady=(6, 2))
         self.b_mark = ttk.Button(row, text="この場面を覚える", command=self.add_mark)
         self.b_mark.pack(side="left")
@@ -2788,8 +2857,8 @@ class App:
             self.b_mcopy.config(state="disabled")
 
     def build_cut_panel(self):
-        f = ttk.LabelFrame(self.right, text="カット編集（残す区間を登録。登録しなければ全体を使います）")
-        f.pack(fill="x", pady=(8, 0))
+        f = ttk.Frame(self.tabs)
+        self.tabs.add(f, text="カット編集（残す区間）")
 
         self.pend_label = ttk.Label(f, text="", font=("Consolas", 10))
         self.pend_label.pack(anchor="w", padx=8, pady=(6, 2))
@@ -2825,10 +2894,8 @@ class App:
         self.seglist.bind("<BackSpace>", lambda e: self.delete_segment())
         self.seglist.bind("<Button-3>", self.on_seg_rightclick)
 
-        ttk.Label(f, text="開始点だけ決めて追加＝そこから最後まで／終了点だけ＝先頭からそこまで。\n"
-                          "左端の □ を押すと、その区間だけ 24p化（アニメ用）が ☑ オン／□ オフ になります。\n"
-                          "（24p区間を含むときは、通常の区間もQTGMCで処理し、59.94pのまま1本につなぎます）\n"
-                          "リストの区間名をダブルクリックすると、その区間の開始位置に移動します。",
+        ttk.Label(f, text="左端の □ でその区間だけ 24p化 ☑／□。区間名をダブルクリックで移動。\n"
+                          "（くわしい説明は、リストにマウスを置くと出ます）",
                   foreground="#666", justify="left").pack(anchor="w", padx=8, pady=(2, 8))
 
         if not HAS_PREVIEW:
@@ -3202,6 +3269,7 @@ class App:
         return o
 
     def on_change(self):
+        self.update_enc_summary()
         self.update_states()
         self.refresh_preview()
         self.notify_assistant()
@@ -3369,7 +3437,7 @@ class App:
         ffmpeg = self.tool("ffmpeg")
         if not ffmpeg:
             self.raw = None
-            self.set_message("ffmpegが見つかりません。\n右下の「ffmpegの場所を指定…」から\nffmpeg.exe を選んでください")
+            self.set_message("ffmpegが見つかりません。\n左の「④ エンコード」の「通常用ffmpeg」で\nffmpeg.exe を選んでください")
             return
 
         # 別のファイルを選んだ（または「取り直す」で、まだ長さを調べられていない）→ 長さを調べて、初期の場面を決める
