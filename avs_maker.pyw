@@ -51,13 +51,14 @@ except Exception:
 HAS_PREVIEW = HAS_IMG and HAS_TKIMG
 
 APP_TITLE = "AVS かんたん作成ツール"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.1"
 
 # 更新の確認先（GitHub）。version.json に最新の版番号と変更内容、avs_maker.pyw に本体を置く
 UPDATE_REPO = "tatata17/avs-maker"
 UPDATE_BRANCH = "main"
 UPDATE_RAW = f"https://raw.githubusercontent.com/{UPDATE_REPO}/{UPDATE_BRANCH}/"
 UPDATE_PAGE = f"https://github.com/{UPDATE_REPO}"
+HELP_PAGE = "https://tatata17.github.io/avs-maker/"     # 使い方のページ（GitHub Pages）
 SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                              "avs_maker_settings.json")
 VIDEO_EXTS = {".avi", ".mp4", ".mkv", ".m2ts", ".ts", ".mts", ".mov",
@@ -1554,6 +1555,7 @@ TIPS_BY_TEXT = {
         "avs を作り、そのまま ffmpeg（HEVC / NVENC）で mp4 にエンコードします。\n"
         "24p化する区間がある動画は「24p用ffmpeg」、それ以外は「通常用ffmpeg」を使います。",
     "エンコードを中止": "今のエンコードを止めます。途中までのファイルは削除されます。",
+    "使い方": "使い方のページ（説明書）をブラウザで開きます。",
     "更新を確認": "インターネット（GitHub）に新しい版があるか確認します。\n"
                   "あれば変更内容を表示し、「はい」で自動で入れ替えます。設定とプリセットはそのまま残ります。\n"
                   "前の版は avs_maker_old.pyw として残るので、不具合があればそれを起動すれば戻せます。",
@@ -2004,7 +2006,8 @@ class App:
                                    state="disabled")
         self.b_cancel.pack(side="left")
         self.b_update = ttk.Button(brow, text="更新を確認", command=self.check_update)
-        self.b_update.pack(side="left", padx=8)
+        self.b_update.pack(side="left", padx=(8, 4))
+        ttk.Button(brow, text="使い方", command=self.open_help).pack(side="left", padx=(0, 8))
         ttk.Label(brow, text=f"v{APP_VERSION}", foreground="#888").pack(side="left")
         self.b_enc = ttk.Button(brow, text="avsを作成してエンコード",
                                 command=lambda: self.make_all(True))
@@ -2931,7 +2934,14 @@ class App:
         self.save_settings()
         self.root.destroy()
 
-    # ---------- 更新
+    # ---------- 使い方・更新
+    def open_help(self):
+        import webbrowser
+        try:
+            webbrowser.open(HELP_PAGE)
+        except Exception:
+            messagebox.showinfo(APP_TITLE, f"ブラウザを開けませんでした。次のページを開いてください。\n{HELP_PAGE}")
+
     def check_update(self):
         if self.running:
             messagebox.showinfo(APP_TITLE, "エンコード中は更新できません。終わってから押してください。")

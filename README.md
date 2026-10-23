@@ -1,5 +1,7 @@
 # AVS かんたん作成ツール（avs-maker）
 
+**📖 使い方のページ：https://tatata17.github.io/avs-maker/** （ツールの「使い方」ボタンからも開けます）
+
 VHS などのアナログ取り込み動画から AviSynth のスクリプト（.avs）を作り、そのまま ffmpeg（HEVC / NVENC）で mp4 にエンコードする Windows 用の GUI ツールです（`avs_maker.pyw`）。
 
 - インターレース解除（KFMDeint）と、ブレンドされたアニメの 24p 化（QTGMC＋SRestore）を、区間ごとに使い分けられる
@@ -248,6 +250,7 @@ ffmpeg のエラーで失敗したときは、mp4 と同じ場所に `〇〇_ffm
 | `avs_maker.pyw` | ツール本体。`APP_VERSION` が版番号 |
 | `version.json` | 最新の版番号と変更内容（更新ボタンが読みに来る） |
 | `README.md` | この説明 |
+| `docs/index.html` | 使い方のページ（GitHub Pages で公開） |
 
 新しい版を出すときは、`avs_maker.pyw` の `APP_VERSION` と `version.json` の `version` を同じ番号に上げます。
 
