@@ -51,7 +51,7 @@ except Exception:
 HAS_PREVIEW = HAS_IMG and HAS_TKIMG
 
 APP_TITLE = "AVS かんたん作成ツール"
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.2.1"
 
 # 更新の確認先（GitHub）。version.json に最新の版番号と変更内容、avs_maker.pyw に本体を置く
 UPDATE_REPO = "tatata17/avs-maker"
@@ -787,11 +787,10 @@ def _num(text, name, as_int=False):
 
 
 def fmt_tc(frame, fps):
-    sec = frame / fps if fps else 0.0
-    h = int(sec // 3600)
-    m = int(sec % 3600 // 60)
-    s = sec % 60
-    return f"{h}:{m:02d}:{s:04.1f}"
+    tenths = int(round((frame / fps if fps else 0.0) * 10))   # 先に 0.1秒単位に丸める（59.96秒が「60.0」にならないように）
+    h, rest = divmod(tenths, 36000)
+    m, rest = divmod(rest, 600)
+    return f"{h}:{m:02d}:{rest // 10:02d}.{rest % 10}"
 
 
 def fmt_dur(sec):
