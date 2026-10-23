@@ -51,7 +51,7 @@ except Exception:
 HAS_PREVIEW = HAS_IMG and HAS_TKIMG
 
 APP_TITLE = "AVS かんたん作成ツール"
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.2.0"
 
 # 更新の確認先（GitHub）。version.json に最新の版番号と変更内容、avs_maker.pyw に本体を置く
 UPDATE_REPO = "tatata17/avs-maker"
@@ -1609,6 +1609,11 @@ TIPS_BY_TEXT = {
         "今の位置の1コマを、動画から読み直します。表示がおかしい・真っ黒なときに押してください\n"
         "（動画の長さを調べられていなければ、調べ直します）。",
     "ffmpegの場所を指定…": "プレビュー用の ffmpeg.exe を選びます（「通常用ffmpeg」の欄と同じ設定です）。",
+    "補正アシスタント…": "別ウインドウで、覚えた場面を大きく表示して補正を詰めます（上級者向け）。\n"
+                          "・白飛び・黒潰れを場面ごとに判定し、潰れている所を色で表示\n"
+                          "・全部の場面で潰れにくい「入力 黒」「入力 白」のおすすめ値\n"
+                          "・肌をクリックして、自然な肌色になる色相のおすすめ値\n"
+                          "先にメイン画面で、明るい場面・暗い場面・顔のアップを「この場面を覚える」で登録しておくと便利です。",
     "この場面を覚える": "今表示している場面を「チェックする場面」に登録します（1本の動画に8つまで）。\n"
                         "明るい場面・暗い場面・顔のアップなどを覚えておくと、設定を変えたあとすぐ見直せます。\n"
                         "覚えた場面は動画ごとに記録され、次に同じ動画を追加したときも残っています。",
@@ -1663,6 +1668,606 @@ TIP_CHOOSE = {
 }
 
 
+# ---------------------------------------------------------------- 補正アシスタント（判定・おすすめ値・肌の色）
+# 自然な肌色の色相の目安（度）。アニメは作品ごとに塗りが違うので広めにとり、
+# 外れているときだけ、範囲の少し内側まで動かす（直しすぎない）
+SKIN_RANGE = (24.0, 42.0)
+SKIN_PULL = (27.0, 39.0)
+
+
+def video_luma(rgb):
+    """表示用RGB(0-255) → 映像の明るさ(16-235の範囲)"""
+    a = rgb.astype(np.float32)
+    return 16.0 + (0.299 * a[..., 0] + 0.587 * a[..., 1] + 0.114 * a[..., 2]) * (219.0 / 255.0)
+
+
+def judge_area(h, w):
+    """判定に使う範囲（VHSの端の黒い縁や、下のノイズの線を除く）"""
+    return (int(h * 0.02), int(h * 0.95), int(w * 0.03), int(w * 0.97))
+
+
+def levels_params(o):
+    """(入力黒, ガンマ, 入力白, 出力黒, 出力白)。明るさ補正がオフなら変換なしの値"""
+    c = parse_color(o)
+    return c.get("levels", (16.0, 1.0, 235.0, 16.0, 235.0))
+
+
+def analyze_scene(raw, o):
+    """1場面の判定。白飛び・黒潰れの割合（%）、補正後の一番暗い所、元の暗い所・明るい所"""
+    a = np.asarray(raw)
+    y0, y1, x0, x1 = judge_area(*a.shape[:2])
+    yv = video_luma(a[y0:y1, x0:x1])
+    il, g, ih, ol, oh = levels_params(o)
+    t = np.clip((yv - il) / max(ih - il, 1e-6), 0, 1) ** (1.0 / g)
+    out_disp = (ol + t * (oh - ol) - 16.0) * (255.0 / 219.0)
+    return {
+        "white": float((yv >= ih - 0.5).mean() * 100),
+        "black": float((yv <= il + 0.5).mean() * 100),
+        "darkest": float(np.percentile(out_disp, 0.5)),
+        "src_lo": float(np.percentile(yv, 0.5)),
+        "src_hi": float(np.percentile(yv, 99.9)),
+    }
+
+
+def recommend_levels(stats, flags):
+    """覚えた場面すべてで白飛び・黒潰れしにくい「入力 黒」「入力 白」を出す。
+    stats: {フレーム: analyze_scene の結果} / flags: {フレーム: {"b": 黒は演出, "w": 白は演出}}"""
+    lows = {n: s["src_lo"] for n, s in stats.items() if not flags.get(n, {}).get("b")}
+    highs = {n: s["src_hi"] for n, s in stats.items() if not flags.get(n, {}).get("w")}
+    lo = int(min(max(math.floor(min(lows.values())) - 1, 16), 80)) if lows else 16
+    hi = int(max(min(math.ceil(max(highs.values())) + 1, 235), lo + 40)) if highs else 235
+    lo_by = min(lows, key=lows.get) if lows else None     # 黒の値を決めた場面
+    hi_by = max(highs, key=highs.get) if highs else None  # 白の値を決めた場面
+    return lo, hi, len(lows), len(highs), lo_by, hi_by
+
+
+def patch_mean(raw, xr, yr):
+    """画像の (xr, yr)（0〜1の位置）のまわりの小さな範囲の平均色"""
+    a = np.asarray(raw)
+    h, w = a.shape[:2]
+    r = max(3, w // 120)
+    cx, cy = int(xr * w), int(yr * h)
+    p = a[max(0, cy - r):cy + r + 1, max(0, cx - r):cx + r + 1].reshape(-1, 3).astype(np.float32)
+    return p.mean(axis=0)
+
+
+def hue_of(rgb):
+    import colorsys
+    hdeg = colorsys.rgb_to_hsv(*(np.clip(np.asarray(rgb, dtype=float), 0, 255) / 255.0))[0] * 360
+    return hdeg - 360 if hdeg > 180 else hdeg            # 赤のあたりを 0° 前後の数字にそろえる
+
+
+def skin_hue(means, o):
+    """肌の見本（平均色のリスト）に設定を当てたときの、色相の平均"""
+    arr = np.clip(np.round(np.array(means, dtype=np.float32)), 0, 255).astype(np.uint8).reshape(-1, 1, 3)
+    out = simulate(arr, o).reshape(-1, 3)
+    return float(np.mean([hue_of(c) for c in out]))
+
+
+def suggest_hue(means, o):
+    """肌の見本が自然な範囲に入る、いちばん小さな色相（Tweak の hue）を探す。(おすすめの値, そのときの色相)"""
+    sat = o.get("sat", "1.0") if o.get("tweak") else "1.0"
+    now = skin_hue(means, o)
+    target = min(max(now, SKIN_PULL[0]), SKIN_PULL[1])
+    best = None
+    for h in range(-30, 31):
+        o2 = dict(o, tweak=True, hue=str(h), sat=sat)
+        v = skin_hue(means, o2)
+        d = abs(v - target)
+        if best is None or d < best[2] - 1e-6 or (abs(d - best[2]) < 1e-6 and abs(h) < abs(best[0])):
+            best = (h, v, d)
+    return best[0], best[1]
+
+
+class AssistWindow:
+    """別ウインドウ：覚えた場面を大きく表示して、白飛び・黒潰れの判定、おすすめの明るさ、肌の色を見る"""
+
+    def __init__(self, app):
+        self.app = app
+        self.win = tk.Toplevel(app.root)
+        self.win.geometry("1240x800")
+        self.win.minsize(900, 600)
+        self.win.protocol("WM_DELETE_WINDOW", self.close)
+        self.raws = {}            # フレーム → 1コマ
+        self.stats = {}           # フレーム → 判定
+        self.cur = None           # 表示中の場面（フレーム番号）
+        self.key = None           # 読み込んだ条件（動画・インターレース解除など）
+        self.q = queue.Queue()
+        self.loading = set()
+        self.tkimg = None
+        self.img_box = None       # 画像を描いた位置 (x, y, 幅, 高さ)
+        self._render_job = None
+        self._refresh_job = None
+        self.rec = None
+        self.hue_rec = None
+        self.build()
+        self.refresh(reload=True)
+        self.win.after(150, self.poll)
+
+    # ----- 画面
+    def build(self):
+        w = self.win
+        top = ttk.Frame(w)
+        top.pack(fill="x", padx=10, pady=(8, 4))
+        self.title_label = ttk.Label(top, text="", font=self.app.font_bold)
+        self.title_label.pack(side="left")
+        self.mode = tk.StringVar(value="split")
+        self.zebra = tk.BooleanVar(value=True)
+        right = ttk.Frame(top)
+        right.pack(side="right")
+        ttk.Label(right, text="表示").pack(side="left")
+        for val, text in (("after", "補正後"), ("before", "補正前"), ("split", "左右で比べる")):
+            ttk.Radiobutton(right, text=text, value=val, variable=self.mode,
+                            command=self.schedule_render).pack(side="left", padx=3)
+        ttk.Checkbutton(right, text="白飛び・黒潰れを色で表示", variable=self.zebra,
+                        command=self.schedule_render).pack(side="left", padx=(10, 0))
+
+        body = ttk.PanedWindow(w, orient="horizontal")
+        body.pack(fill="both", expand=True, padx=10, pady=4)
+
+        left = ttk.Frame(body)
+        body.add(left, weight=3)
+        self.canvas = tk.Canvas(left, background="#1b1b1b", highlightthickness=0, cursor="crosshair")
+        self.canvas.pack(fill="both", expand=True)
+        self.canvas.bind("<Configure>", lambda e: self.schedule_render())
+        self.canvas.bind("<Button-1>", self.on_click)
+        self.canvas.bind("<Button-3>", self.on_right_click)
+        srow = ttk.Frame(left)
+        srow.pack(fill="x", pady=(4, 0))
+        ttk.Label(srow, text="左右の境目").pack(side="left")
+        self.split = tk.DoubleVar(value=0.5)
+        self.split_scale = ttk.Scale(srow, from_=0.0, to=1.0, variable=self.split,
+                                     command=lambda e: self.schedule_render())
+        self.split_scale.pack(side="left", fill="x", expand=True, padx=6)
+        self.legend = ttk.Label(left, foreground="#666", text=(
+            "赤の斜線＝白飛び ／ 青の斜線＝黒潰れ ／ 黄色の点線の外＝判定しない所（VHSの端の縁など）\n"
+            "肌の部分をクリック＝肌の見本に登録 ／ 右クリック＝近くの見本を消す"))
+        self.legend.pack(anchor="w", pady=(2, 0))
+
+        side = ttk.Frame(body, width=400)
+        body.add(side, weight=1)
+
+        f1 = ttk.LabelFrame(side, text="覚えた場面と判定")
+        f1.pack(fill="both", expand=True, pady=(0, 6))
+        cols = ("t", "white", "black", "dark", "b", "w")
+        self.tree = ttk.Treeview(f1, columns=cols, show="headings", height=8, selectmode="browse")
+        for c, text, wid in (("t", "場面", 78), ("white", "白飛び", 54), ("black", "黒潰れ", 54),
+                             ("dark", "最暗部", 48), ("b", "黒は演出", 58), ("w", "白は演出", 58)):
+            self.tree.heading(c, text=text)
+            self.tree.column(c, width=wid, minwidth=40, anchor="center", stretch=(c == "t"))
+        self.tree.tag_configure("warn", foreground="#b00020")
+        self.tree.tag_configure("muted", foreground="#888")
+        self.tree.pack(fill="both", expand=True, padx=6, pady=(6, 2))
+        self.tree.bind("<<TreeviewSelect>>", lambda e: self.on_tree_select())
+        self.tree.bind("<Button-1>", self.on_tree_click, add="+")
+        brow = ttk.Frame(f1)
+        brow.pack(fill="x", padx=6, pady=(0, 4))
+        ttk.Button(brow, text="メイン画面の今の場面を追加", command=self.add_current).pack(side="left")
+        ttk.Button(brow, text="選んだ場面を忘れる", command=self.forget_scene).pack(side="left", padx=4)
+        self.summary = ttk.Label(f1, text="", wraplength=380, justify="left")
+        self.summary.pack(anchor="w", padx=6, pady=(0, 6))
+
+        f2 = ttk.LabelFrame(side, text="おすすめの明るさ（Levels）")
+        f2.pack(fill="x", pady=(0, 6))
+        self.rec_label = ttk.Label(f2, text="", wraplength=380, justify="left")
+        self.rec_label.pack(anchor="w", padx=6, pady=(6, 2))
+        self.b_rec = ttk.Button(f2, text="この値を使う", command=self.apply_rec, state="disabled")
+        self.b_rec.pack(anchor="w", padx=6, pady=(0, 6))
+
+        f3 = ttk.LabelFrame(side, text="肌の色")
+        f3.pack(fill="x")
+        self.skin_label = ttk.Label(f3, text="", wraplength=380, justify="left")
+        self.skin_label.pack(anchor="w", padx=6, pady=(6, 2))
+        r3 = ttk.Frame(f3)
+        r3.pack(fill="x", padx=6, pady=(0, 6))
+        self.b_hue = ttk.Button(r3, text="おすすめの色相にする", command=self.apply_hue, state="disabled")
+        self.b_hue.pack(side="left")
+        ttk.Button(r3, text="肌の見本を全部消す", command=self.clear_skins).pack(side="left", padx=4)
+
+        for wdg, tip in (
+            (self.tree, "覚えた場面ごとの判定です。行を選ぶと左に大きく表示します。\n"
+                        "白飛び・黒潰れ：模様が消えている部分の割合（判定する範囲の中で）。赤字は多めです。\n"
+                        "最暗部：補正後の一番暗い所の明るさ（0＝真っ黒）。大きいと黒が浮いています。\n"
+                        "「黒は演出」「白は演出」の欄を押すと ☑ になり、その場面のその判定を、おすすめ値の計算から外します\n"
+                        "（夜の場面の真っ黒な空、光っている物など、潰れていて正しい場面に使います）。"),
+            (self.b_rec, "おすすめの値を、メイン画面の「明るさ補正」に入れます（選んでいる動画に反映）。"),
+            (self.b_hue, "肌の見本が自然な肌色の範囲に入る色相を、メイン画面の「色相・彩度の補正」に入れます。"),
+        ):
+            ToolTip(wdg, tip)
+
+    # ----- 状態
+    def path(self):
+        return self.app.cur_path
+
+    def frames(self):
+        return list(self.app.marks.get(self.path(), [])) if self.path() else []
+
+    def flags(self):
+        return self.app.mflags.setdefault(self.path(), {}) if self.path() else {}
+
+    def skins(self):
+        return self.app.skins.setdefault(self.path(), []) if self.path() else []
+
+    def options(self):
+        return self.app.options()
+
+    def load_key(self):
+        o = self.options()
+        return (self.path(), o["deint"], o["field"], self.app.tool("ffmpeg"))
+
+    def on_app_change(self):
+        """メイン画面で設定や場面が変わったとき"""
+        if self._refresh_job:
+            self.win.after_cancel(self._refresh_job)
+        self._refresh_job = self.win.after(200, lambda: self.refresh(reload=self.load_key() != self.key))
+
+    def refresh(self, reload=False):
+        self._refresh_job = None
+        if not self.win.winfo_exists():
+            return
+        path = self.path()
+        self.win.title(f"補正アシスタント － {os.path.basename(path)}" if path else "補正アシスタント")
+        if reload:
+            self.key = self.load_key()
+            self.raws, self.stats = {}, {}
+            self.loading = set()
+        frames = self.frames()
+        for n in list(self.raws):
+            if n not in frames:
+                self.raws.pop(n, None)
+                self.stats.pop(n, None)
+        if self.cur not in frames:
+            self.cur = frames[0] if frames else None
+        self.start_loading()
+        self.analyze_all()
+
+    def start_loading(self):
+        path, info = self.path(), self.app.cur_info()
+        _, deint, field, ffmpeg = self.key or (None, None, None, None)
+        need = []
+        for n in self.frames():
+            if n in self.raws or n in self.loading:
+                continue
+            cached = self.app.frame_cache.get((path, n, deint, field, ffmpeg))
+            if cached is not None:
+                self.raws[n] = cached
+            else:
+                need.append(n)
+        if not need or not ffmpeg or not path:
+            return
+        self.loading.update(need)
+        key = self.key
+
+        def work():
+            for n in need:
+                try:
+                    t = max(0.0, (n - 0.3) / info["fps"]) if info else 0.0
+                    self.q.put((key, n, grab_frame(ffmpeg, path, t, deint, field), None))
+                except Exception as e:
+                    self.q.put((key, n, None, e))
+        threading.Thread(target=work, daemon=True).start()
+
+    def poll(self):
+        try:
+            if not self.win.winfo_exists():
+                return
+        except tk.TclError:
+            return
+        changed = False
+        try:
+            while True:
+                key, n, img, err = self.q.get_nowait()
+                if key != self.key:
+                    continue
+                self.loading.discard(n)
+                if img is not None:
+                    self.raws[n] = img
+                    self.app.cache_frame((key[0], n, key[1], key[2], key[3]), img)
+                    changed = True
+        except queue.Empty:
+            pass
+        try:
+            if changed:
+                self.analyze_all()
+            self.win.after(150, self.poll)
+        except tk.TclError:          # ウインドウを閉じた
+            pass
+
+    # ----- 判定
+    def analyze_all(self):
+        o = self.options()
+        try:
+            parse_color(o)
+        except ValueError as e:
+            self.summary.config(text=f"設定にまちがいがあります：{e}", foreground="#b00020")
+            return
+        self.stats = {n: analyze_scene(img, o) for n, img in self.raws.items() if n in self.frames()}
+        self.update_tree()
+        self.update_recommend(o)
+        self.update_skin(o)
+        self.schedule_render()
+
+    def update_tree(self):
+        info = self.app.cur_info()
+        flags = self.flags()
+        sel = self.cur
+        self.tree.delete(*self.tree.get_children())
+        for n in self.frames():
+            f = flags.get(n, {})
+            s = self.stats.get(n)
+            t = fmt_tc(n, info["fps"]) if info else str(n)
+            if s is None:
+                vals = (t, "…", "…", "…", "☑" if f.get("b") else "☐", "☑" if f.get("w") else "☐")
+                tags = ("muted",)
+            else:
+                w_txt = "なし" if s["white"] < 0.1 else f"{s['white']:.1f}%"
+                b_txt = "なし" if s["black"] < 0.3 else f"{s['black']:.1f}%"
+                if f.get("w"):
+                    w_txt = "（演出）"
+                if f.get("b"):
+                    b_txt = "（演出）"
+                vals = (t, w_txt, b_txt, f"{s['darkest']:.0f}",
+                        "☑" if f.get("b") else "☐", "☑" if f.get("w") else "☐")
+                bad = ((not f.get("w") and s["white"] >= 0.5) or (not f.get("b") and s["black"] >= 2.0))
+                tags = ("warn",) if bad else ()
+            self.tree.insert("", "end", iid=str(n), values=vals, tags=tags)
+        if sel is not None and self.tree.exists(str(sel)):
+            self.tree.selection_set(str(sel))
+            self.tree.see(str(sel))
+
+        if not self.frames():
+            self.summary.config(foreground="#b00020", text=(
+                "覚えた場面がありません。メイン画面で見比べたい場面を表示して「この場面を覚える」"
+                "（またはここの「メイン画面の今の場面を追加」）を押してください。\n"
+                "一番明るい場面・一番暗い場面・顔のアップを入れると、判定が正確になります。"))
+            return
+        if self.loading:
+            self.summary.config(foreground="", text=f"場面を読み込んでいます…（残り {len(self.loading)}）")
+            return
+        flags = self.flags()
+        nw = sum(1 for n, s in self.stats.items() if not flags.get(n, {}).get("w") and s["white"] >= 0.5)
+        nb = sum(1 for n, s in self.stats.items() if not flags.get(n, {}).get("b") and s["black"] >= 2.0)
+        darks = [s["darkest"] for n, s in self.stats.items() if not flags.get(n, {}).get("b")]
+        lines = [f"白飛び：{'多めの場面が ' + str(nw) + ' つ' if nw else '問題なし'}",
+                 f"黒潰れ：{'多めの場面が ' + str(nb) + ' つ' if nb else '問題なし'}"]
+        if darks and min(darks) > 30:
+            lines.append(f"黒の浮き：どの場面も一番暗い所が {min(darks):.0f} 以上です。黒が浮いています"
+                         "（「入力 黒」を上げる余地があります）")
+        else:
+            lines.append("黒の浮き：問題なし")
+        self.summary.config(foreground="#b00020" if (nw or nb) else "", text="\n".join(lines))
+
+    def update_recommend(self, o):
+        if not self.stats or self.loading:
+            self.rec = None
+            self.rec_label.config(text="（場面を読み込むと表示されます）")
+            self.b_rec.config(state="disabled")
+            return
+        lo, hi, nl, nh, lo_by, hi_by = recommend_levels(self.stats, self.flags())
+        self.rec = (lo, hi)
+        il, g, ih, ol, oh = levels_params(o)
+        info = self.app.cur_info()
+        tc = (lambda n: fmt_tc(n, info["fps"])) if info else str
+        now = f"今：入力 黒 {il:.0f}・入力 白 {ih:.0f}" if o.get("levels") else "今：明るさ補正なし"
+        text = (f"入力 黒 {lo}・入力 白 {hi}\n（{now}）\n"
+                f"覚えた場面のうち、黒は {nl} 場面、白は {nh} 場面をもとに、どれも潰れにくい値を出しています。")
+        if lo_by is not None:
+            text += (f"\n黒の値は {tc(lo_by)} の場面、白の値は {tc(hi_by)} の場面で決まっています。"
+                     "その場面の暗さ・明るさが演出なら、「黒は演出」「白は演出」に ☑ を入れると、ほかの場面に合わせた値になります。")
+        if nl == 0 or nh == 0:
+            text += "\n※演出のチェックで、計算に使える場面がなくなっています。"
+        if len(self.stats) < 3:
+            text += "\n※場面が少ないと当てにならないので、明るい場面と暗い場面を足してください。"
+        self.rec_label.config(text=text)
+        self.b_rec.config(state="normal")
+
+    def update_skin(self, o):
+        means = []
+        for n, xr, yr in self.skins():
+            if n in self.raws:
+                means.append(patch_mean(self.raws[n], xr, yr))
+        total = len(self.skins())
+        if not total:
+            self.hue_rec = None
+            self.b_hue.config(state="disabled")
+            self.skin_label.config(foreground="", text=(
+                "左の画像で、顔や手など肌の部分をクリックしてください（場面をまたいで何点でも）。\n"
+                f"自然な肌色の目安は {SKIN_RANGE[0]:.0f}〜{SKIN_RANGE[1]:.0f}° です（0°＝赤、60°＝黄色）。"))
+            return
+        if not means:
+            self.skin_label.config(text="（場面を読み込むと表示されます）")
+            return
+        before = skin_hue(means, dict(o, levels=False, tweak=False))
+        now = skin_hue(means, o)
+        h, v = suggest_hue(means, o)
+        cur_h = int(float(o.get("hue", 0))) if o.get("tweak") else 0
+        ok = SKIN_RANGE[0] <= now <= SKIN_RANGE[1]
+        text = (f"肌の見本 {len(means)} 点：元の色 {before:.0f}° → 今の設定 {now:.0f}°"
+                f"（{'自然な肌色の範囲です' if ok else f'自然な肌色（{SKIN_RANGE[0]:.0f}〜{SKIN_RANGE[1]:.0f}°）から外れています'}）\n")
+        if abs(h - cur_h) >= 3 and not ok:
+            text += f"色相を {h:+d} にすると、{v:.0f}° になります。"
+            self.hue_rec = h
+            self.b_hue.config(state="normal", text=f"色相を {h:+d} にする")
+        else:
+            text += "今の色相のままで大丈夫です。"
+            self.hue_rec = None
+            self.b_hue.config(state="disabled", text="おすすめの色相にする")
+        text += "\n※作品によって肌の塗りは違います。参考画像があれば、そちらに合わせるのが確実です。"
+        self.skin_label.config(foreground="" if ok else "#b00020", text=text)
+
+    # ----- 操作
+    def on_tree_select(self):
+        sel = self.tree.selection()
+        if sel:
+            n = int(sel[0])
+            if n != self.cur:
+                self.cur = n
+                self.schedule_render()
+
+    def on_tree_click(self, event):
+        if self.tree.identify_region(event.x, event.y) != "cell":
+            return
+        col = self.tree.identify_column(event.x)
+        row = self.tree.identify_row(event.y)
+        if not row or col not in ("#5", "#6"):
+            return
+        n = int(row)
+        f = self.flags().setdefault(n, {})
+        k = "b" if col == "#5" else "w"
+        f[k] = not f.get(k)
+        self.app.schedule_save()
+        self.analyze_all()
+
+    def add_current(self):
+        self.app.add_mark()
+        self.app.root.after(50, lambda: self.refresh())
+
+    def forget_scene(self):
+        if self.cur is None:
+            return
+        self.app.forget_mark(self.cur)
+        self.refresh()
+
+    def on_click(self, event):
+        n = self.cur
+        if n is None or n not in self.raws or not self.img_box:
+            return
+        x, y, w, h = self.img_box
+        if not (x <= event.x < x + w and y <= event.y < y + h):
+            return
+        self.skins().append([n, round((event.x - x) / w, 4), round((event.y - y) / h, 4)])
+        self.app.schedule_save()
+        self.update_skin(self.options())
+        self.schedule_render()
+
+    def on_right_click(self, event):
+        if not self.img_box or self.cur is None:
+            return
+        x, y, w, h = self.img_box
+        best, bi = 18 ** 2, None
+        for i, (n, xr, yr) in enumerate(self.skins()):
+            if n != self.cur:
+                continue
+            d = (x + xr * w - event.x) ** 2 + (y + yr * h - event.y) ** 2
+            if d <= best:
+                best, bi = d, i
+        if bi is not None:
+            del self.skins()[bi]
+            self.app.schedule_save()
+            self.update_skin(self.options())
+            self.schedule_render()
+
+    def clear_skins(self):
+        if self.path() and self.app.skins.get(self.path()):
+            if messagebox.askyesno(APP_TITLE, "この動画の肌の見本を全部消しますか？", parent=self.win):
+                self.app.skins[self.path()] = []
+                self.app.schedule_save()
+                self.update_skin(self.options())
+                self.schedule_render()
+
+    def apply_rec(self):
+        if not self.rec:
+            return
+        lo, hi = self.rec
+        v = self.app.vars
+        v["levels"].set(True)
+        v["in_low"].set(str(lo))
+        v["in_high"].set(str(hi))
+        self.app.status.config(text=f"明るさ補正を 入力 黒 {lo}・入力 白 {hi} にしました")
+
+    def apply_hue(self):
+        if self.hue_rec is None:
+            return
+        v = self.app.vars
+        if not v["tweak"].get():
+            v["sat"].set("1.0")
+        v["tweak"].set(True)
+        v["hue"].set(str(self.hue_rec))
+        self.app.status.config(text=f"色相を {self.hue_rec:+d} にしました")
+
+    # ----- 描画
+    def schedule_render(self):
+        if self._render_job:
+            self.win.after_cancel(self._render_job)
+        self._render_job = self.win.after(60, self.render)
+
+    def render(self):
+        self._render_job = None
+        c = self.canvas
+        if not c.winfo_exists():
+            return
+        c.delete("all")
+        cw, ch = max(c.winfo_width(), 50), max(c.winfo_height(), 50)
+        n = self.cur
+        raw = self.raws.get(n) if n is not None else None
+        info = self.app.cur_info()
+        if n is not None:
+            self.title_label.config(text=f"場面 {self.frames().index(n) + 1}/{len(self.frames())}　"
+                                         f"フレーム {n}" + (f"（{fmt_tc(n, info['fps'])}）" if info else ""))
+        else:
+            self.title_label.config(text="")
+        if raw is None:
+            self.img_box = None
+            msg = "読み込んでいます…" if n is not None else "覚えた場面がありません"
+            c.create_text(cw // 2, ch // 2, text=msg, fill="#bbb")
+            return
+        o = self.options()
+        aspect = display_aspect(raw.width, raw.height, o)
+        if cw / ch > aspect:
+            h = ch - 8
+            w = int(h * aspect)
+        else:
+            w = cw - 8
+            h = int(w / aspect)
+        w, h = max(w, 10), max(h, 10)
+        base = raw.resize((w, h), Image.BILINEAR)
+        b = np.asarray(base)
+        try:
+            a = simulate(b, o)
+        except ValueError:
+            a = b
+        if self.zebra.get():
+            a = a.copy()
+            yv = video_luma(b)
+            il, g, ih, ol, oh = levels_params(o)
+            yy, xx = np.mgrid[0:h, 0:w]
+            stripe = ((xx + yy) // 4) % 2 == 0
+            a[(yv >= ih - 0.5) & stripe] = (235, 40, 40)
+            a[(yv <= il + 0.5) & stripe] = (40, 120, 255)
+        mode = self.mode.get()
+        if mode == "before":
+            out = b
+        elif mode == "after":
+            out = a
+        else:
+            sx = int(w * self.split.get())
+            out = np.concatenate([b[:, :sx], a[:, sx:]], axis=1)
+        self.tkimg = ImageTk.PhotoImage(Image.fromarray(np.ascontiguousarray(out)))
+        x0, y0 = (cw - w) // 2, (ch - h) // 2
+        self.img_box = (x0, y0, w, h)
+        c.create_image(x0, y0, anchor="nw", image=self.tkimg)
+        if mode == "split":
+            sx = x0 + int(w * self.split.get())
+            c.create_line(sx, y0, sx, y0 + h, fill="#ffffff", width=2)
+            c.create_text(x0 + 8, y0 + 8, anchor="nw", text="補正前", fill="#fff")
+            c.create_text(x0 + w - 8, y0 + 8, anchor="ne", text="補正後", fill="#fff")
+        ay0, ay1, ax0, ax1 = judge_area(h, w)
+        c.create_rectangle(x0 + ax0, y0 + ay0, x0 + ax1, y0 + ay1, outline="#ffd24d", dash=(4, 4))
+        k = 0
+        for sn, xr, yr in self.skins():
+            k += 1
+            if sn != n:
+                continue
+            px, py = x0 + xr * w, y0 + yr * h
+            c.create_oval(px - 7, py - 7, px + 7, py + 7, outline="#ffffff", width=2)
+            c.create_oval(px - 8, py - 8, px + 8, py + 8, outline="#000000", width=1)
+            c.create_text(px + 11, py - 11, text=str(k), fill="#ffffff", anchor="sw")
+
+    def close(self):
+        self.app.assistant = None
+        self.win.destroy()
+
+
 # ---------------------------------------------------------------- GUI
 class App:
     def __init__(self, root):
@@ -1681,6 +2286,9 @@ class App:
         self.cuts = {}             # 動画のパス → [(開始フレーム, 終了フレーム), ...]
         self.fsets = {}            # 動画のパス → その動画の設定（FILE_KEYS の分）
         self.marks = {}            # 動画のパス → チェックする場面（フレーム番号のリスト）
+        self.mflags = {}           # 動画のパス → {フレーム: {"b": 黒は演出, "w": 白は演出}}
+        self.skins = {}            # 動画のパス → 肌の見本 [[フレーム, x(0-1), y(0-1)], ...]
+        self.assistant = None      # 補正アシスタントのウインドウ
         self.frame_cache = {}      # 取り出した1コマの控え（同じ場面をすぐ出すため）
         self._batch_running = False
         self.clip = None           # 「設定をコピー」で覚えた設定
@@ -1896,6 +2504,7 @@ class App:
         hrow.grid(row=0, column=0, columnspan=3, sticky="ew", padx=8, pady=(4, 0))
         self.edit_label = ttk.Label(hrow, text="", font=self.font_bold)
         self.edit_label.pack(side="left")
+        ttk.Button(hrow, text="補正アシスタント…", command=self.open_assistant).pack(side="right")
         self.mixed_label = ttk.Label(f2, text="", foreground="#b00020")
         self.mixed_label.grid(row=1, column=0, columnspan=3, sticky="w", padx=8)
 
@@ -2279,7 +2888,7 @@ class App:
         if path in self.files:
             return 0
         self.forget_file(path)      # 以前同じ名前のファイルを読んでいても、調べ直す
-        settings, cuts, marks = self.recall(path)
+        settings, cuts, marks, mflags, skins = self.recall(path)
         if settings is not None:
             self._restored += 1
             s = dict(base)
@@ -2287,6 +2896,8 @@ class App:
             self.fsets[path] = s
             self.cuts[path] = cuts
             self.marks[path] = marks
+            self.mflags[path] = mflags
+            self.skins[path] = skins
         else:
             self.fsets[path] = dict(base)
         self.files.append(path)
@@ -2458,7 +3069,7 @@ class App:
         files = self.record.get("files", {})
         ent = files.get(os.path.basename(path).lower())
         if not ent:
-            return None, None, []
+            return None, None, [], {}, []
         settings = ent.get("settings")
         sig = self._file_sig(path)
         if sig and ent.get("size") == sig[0]:
@@ -2470,9 +3081,18 @@ class App:
                 marks = sorted({int(x) for x in ent.get("marks") or []})
             except (ValueError, TypeError):
                 marks = []
-        else:
-            cuts, marks = [], []   # 同じ名前でも中身が違う（取り込み直した）ので、前の区間・場面は使わない
-        return (settings if isinstance(settings, dict) else None), cuts, marks
+            try:
+                mflags = {int(k): {"b": bool(v.get("b")), "w": bool(v.get("w"))}
+                          for k, v in (ent.get("mflags") or {}).items()}
+            except (ValueError, TypeError, AttributeError):
+                mflags = {}
+            try:
+                skins = [[int(a), float(b), float(c)] for a, b, c in ent.get("skins") or []]
+            except (ValueError, TypeError):
+                skins = []
+        else:      # 同じ名前でも中身が違う（取り込み直した）ので、前の区間・場面・見本は使わない
+            cuts, marks, mflags, skins = [], [], {}, []
+        return (settings if isinstance(settings, dict) else None), cuts, marks, mflags, skins
 
     def remember_files(self):
         """一覧にある動画の設定を、記録に書き込む（ファイル名ごとに1件）"""
@@ -2488,6 +3108,8 @@ class App:
                 "settings": dict(self.fsets.get(p, {})),
                 "cuts": [list(x) for x in self.cuts.get(p, [])],
                 "marks": list(self.marks.get(p, [])),
+                "mflags": {str(k): v for k, v in self.mflags.get(p, {}).items() if v.get("b") or v.get("w")},
+                "skins": [list(x) for x in self.skins.get(p, [])],
             }
         if len(files) > RECORD_MAX_FILES:      # 古いものから忘れる
             for k in sorted(files, key=lambda k: files[k].get("updated", 0))[:len(files) - RECORD_MAX_FILES]:
@@ -2531,6 +3153,8 @@ class App:
             self.files.remove(p)
             self.fsets.pop(p, None)
             self.marks.pop(p, None)
+            self.mflags.pop(p, None)
+            self.skins.pop(p, None)
         self.select_index(first)             # 消したところの次（なければ前）のファイルを選び直す
         self.update_hint()
         self.save_settings()
@@ -2542,6 +3166,8 @@ class App:
             self.forget_file(p)
             self.fsets.pop(p, None)
             self.marks.pop(p, None)
+            self.mflags.pop(p, None)
+            self.skins.pop(p, None)
         self.files.clear()
         self.update_hint()
         self.on_select()
@@ -2579,6 +3205,33 @@ class App:
     def on_change(self):
         self.update_states()
         self.refresh_preview()
+        self.notify_assistant()
+
+    def notify_assistant(self):
+        if self.assistant is not None:
+            try:
+                self.assistant.on_app_change()
+            except tk.TclError:
+                self.assistant = None
+
+    def open_assistant(self):
+        if not HAS_PREVIEW:
+            messagebox.showinfo(APP_TITLE, "補正アシスタントを使うには pillow と numpy が必要です。")
+            return
+        if not self.files:
+            messagebox.showinfo(APP_TITLE, "先に動画を追加して、一覧で選んでください。")
+            return
+        if self.assistant is not None:
+            try:
+                self.assistant.win.deiconify()
+                self.assistant.win.lift()
+                self.assistant.win.focus_force()
+                return
+            except tk.TclError:
+                self.assistant = None
+        if not self.cur_path:
+            self.load_frame(force=True)
+        self.assistant = AssistWindow(self)
 
     def update_states(self):
         v = self.vars
@@ -2849,6 +3502,7 @@ class App:
         self.marklist.selection_set(lst.index(n))
         self.status.config(text=f"フレーム {n} を覚えました（{len(lst)} 場面）")
         self.schedule_save()
+        self.notify_assistant()
 
     def delete_mark(self):
         sel = self.marklist.curselection()
@@ -2857,9 +3511,22 @@ class App:
             return
         for i in reversed(sel):
             if i < len(lst):
-                del lst[i]
+                self.forget_mark(lst[i], refresh=False)
         self.refresh_marks()
         self.schedule_save()
+        self.notify_assistant()
+
+    def forget_mark(self, n, refresh=True):
+        """覚えた場面を1つ忘れる（その場面の演出チェック・肌の見本も消す）"""
+        p = self.cur_path
+        if p in self.marks and n in self.marks[p]:
+            self.marks[p].remove(n)
+        self.mflags.get(p, {}).pop(n, None)
+        if p in self.skins:
+            self.skins[p] = [x for x in self.skins[p] if x[0] != n]
+        if refresh:
+            self.refresh_marks()
+            self.schedule_save()
 
     def goto_mark(self):
         sel = self.marklist.curselection()
