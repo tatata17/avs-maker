@@ -234,6 +234,7 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
     <span class="chip">KFMDeint / QTGMC＋SRestore</span>
     <span class="chip">Levels・Tweak・CCD</span>
     <span class="chip">比較画像をワンクリックでコピー</span>
+    <span class="chip">チェックする場面をまとめて比較</span>
     <span class="chip">動画ごとの設定・プリセット</span>
     <span class="chip">ボタンひとつで更新</span>
   </div>
@@ -338,8 +339,17 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
 <ul>
   <li>画像を押している間は「補正前」、離すと「補正後（Levels/Tweak の見本）」。</li>
   <li>画像を押したあと <kbd>←</kbd><kbd>→</kbd> で1コマ、<kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd> で1秒移動。</li>
+  <li><strong>移動先</strong>の欄にフレーム番号（例：<code>18743</code>）か時間（例：<code>10:25.4</code>、<code>1:02:03</code>）を入れて <kbd>Enter</kbd> で、その場面へ移動。</li>
   <li><strong>比較画像（コピー／保存…）</strong>：左に補正前、右に補正後を並べ、下にファイル名・フレーム番号・設定を書き込んだ画像を作ります。「コピー」してチャットに <kbd>Ctrl</kbd>+<kbd>V</kbd> で貼れます。</li>
 </ul>
+<h3>チェックする場面</h3>
+<p>設定を変えるたびに、同じ場面を見直すための機能です。</p>
+<ol class="steps">
+  <li><strong>場面を覚える</strong>見比べたい場面（一番明るい場面・暗い場面・顔のアップなど）で「この場面を覚える」。1本の動画に8つまで。</li>
+  <li><strong>すぐ移動</strong>リストをクリックすると、その場面へすぐ移動します。</li>
+  <li><strong>まとめて比較</strong>「まとめてコピー」で、覚えた場面すべての比較画像（左＝補正前／右＝補正後）を縦に並べた1枚がコピーされます。いちばん下に設定の要約が入ります。「まとめて保存…」で画像として保存もできます。</li>
+</ol>
+<p>覚えた場面は動画ごとに記録され、次に同じ動画を追加したときも残っています（同じ名前でも中身が違うファイルでは消えます）。</p>
 <div class="note"><b>プレビューで分かるもの</b>補正後の見本に反映されるのは Levels と Tweak だけです。インターレース解除・CCD・24p 化の効果は出ません（CCD がオンのときは注意書きが出ます）。</div>
 </section>
 
@@ -407,7 +417,7 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
   <li><strong>場面を選ぶ</strong>一番明るい場面（白い紙・雲・窓・クレジットの文字）、一番暗い場面（夜・黒い服）、人物の顔のアップを探します。</li>
   <li><strong>明るさ（Levels）</strong>一番明るい場面で白が上限に張り付かない（白飛びしない）ところまで「入力 白」を下げ、暗い場面で影が潰れないところまで「入力 黒」を上げます。クレジットの白い文字の中が上限に届くのは問題ありません。</li>
   <li><strong>色（Tweak）</strong>顔のアップで肌の色を見ます。肌がピンク〜赤っぽいテープだけ色相を −5〜−10。もともと自然なら色補正はしません（回しすぎると赤い物がオレンジに、肌が黄色っぽくなります）。白い雲などの「色かぶり」は色相では直りません。</li>
-  <li><strong>比較画像で確認</strong>「コピー」で補正前／補正後を並べた画像を作り、チャットに貼って相談すると早いです。</li>
+  <li><strong>比較画像で確認</strong>1で探した場面を「この場面を覚える」で登録しておき、設定を変えるたびに「まとめてコピー」。全部の場面の補正前／補正後が1枚にそろうので、チャットに貼って相談すると早いです。</li>
   <li><strong>使い回す</strong>同じシリーズ・同じ取り込み方なら、1本目の設定をプリセットにして使い回し、巻ごとに肌の色だけ確認します。</li>
 </ol>
 
@@ -468,7 +478,7 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
 <div class="table-wrap"><table>
 <tr><th>ファイル</th><th>内容</th></tr>
 <tr><td><code>avs_maker_settings.json</code></td><td class="wrap">共通の設定（ffmpeg の場所・保存先・画質など）と、最後に使った設定</td></tr>
-<tr><td><code>avs_maker_動画ごとの設定とプリセット.json</code></td><td class="wrap">動画ごとの設定・カット区間・プリセット</td></tr>
+<tr><td><code>avs_maker_動画ごとの設定とプリセット.json</code></td><td class="wrap">動画ごとの設定・カット区間・チェックする場面・プリセット</td></tr>
 <tr><td><code>ccd_64bit.vdf</code></td><td class="wrap">内蔵の CCD フィルタを書き出したもの（CCD を使うと作られる）</td></tr>
 <tr><td><code>avs_maker_old.pyw</code></td><td class="wrap">更新したときの、前の版</td></tr>
 </table></div>

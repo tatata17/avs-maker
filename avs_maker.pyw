@@ -51,7 +51,7 @@ except Exception:
 HAS_PREVIEW = HAS_IMG and HAS_TKIMG
 
 APP_TITLE = "AVS かんたん作成ツール"
-APP_VERSION = "1.0.1"
+APP_VERSION = "1.1.0"
 
 # 更新の確認先（GitHub）。version.json に最新の版番号と変更内容、avs_maker.pyw に本体を置く
 UPDATE_REPO = "tatata17/avs-maker"
@@ -1162,7 +1162,7 @@ def settings_summary(o):
     return " / ".join(items) if items else "補正なし"
 
 
-def make_compare_image(raw, o, title=""):
+def make_compare_image(raw, o, title="", show_settings=True):
     """補正前を左、補正後を右に並べ、見出しと設定の要約を付けた画像を作る"""
     from PIL import ImageDraw
     aspect = display_aspect(raw.width, raw.height, o)
@@ -1174,7 +1174,7 @@ def make_compare_image(raw, o, title=""):
     gap, head = 8, 34
     font, jp = _load_font(18)
     small, _ = _load_font(15)
-    lines = [l for l in (title, settings_summary(o) if jp else "") if l]
+    lines = [l for l in (title, settings_summary(o) if (jp and show_settings) else "") if l]
     foot = 10 + 22 * len(lines)
     W, H = w * 2 + gap, head + h + foot
     img = Image.new("RGB", (W, H), (32, 32, 32))
@@ -1188,6 +1188,47 @@ def make_compare_image(raw, o, title=""):
         d.text((8, y), line, fill=(200, 200, 200), font=small)
         y += 22
     return img
+
+
+def stack_compare_images(imgs, o):
+    """複数の比較画像を縦に並べ、いちばん下に設定の要約を1回だけ書く"""
+    from PIL import ImageDraw
+    gap = 6
+    font, jp = _load_font(15)
+    foot = 34 if jp else 0
+    W = max(i.width for i in imgs)
+    H = sum(i.height for i in imgs) + gap * (len(imgs) - 1) + foot
+    out = Image.new("RGB", (W, H), (32, 32, 32))
+    y = 0
+    for i in imgs:
+        out.paste(i, (0, y))
+        y += i.height + gap
+    if jp:
+        ImageDraw.Draw(out).text((8, H - foot + 6), settings_summary(o), fill=(200, 200, 200), font=font)
+    return out
+
+
+def parse_position(text, fps, nframes):
+    """「18743」→ フレーム番号、「10:25.4」「1:02:03」→ 時間 として、フレーム番号を返す"""
+    t = str(text).strip().replace("：", ":").replace("　", "").replace(" ", "")
+    t = t.translate(str.maketrans("０１２３４５６７８９．", "0123456789."))
+    if not t:
+        raise ValueError("フレーム番号か時間を入れてください")
+    if re.fullmatch(r"\d+", t):
+        n = int(t)
+    elif re.fullmatch(r"\d+(:\d+(\.\d+)?){1,2}", t) or re.fullmatch(r"\d+:\d+:\d+(\.\d+)?", t):
+        sec = 0.0
+        for part in t.split(":"):
+            sec = sec * 60 + float(part)
+        if not fps:
+            raise ValueError("動画の長さを調べられていないため、時間では移動できません")
+        n = int(round(sec * fps))
+    else:
+        raise ValueError(f"「{text}」は読み取れませんでした。\n"
+                         "フレーム番号（例：18743）か、時間（例：10:25.4 や 1:02:03）で入れてください")
+    if nframes:
+        n = min(max(n, 0), nframes - 1)
+    return max(n, 0)
 
 
 def copy_image_to_clipboard(img):
@@ -1568,6 +1609,14 @@ TIPS_BY_TEXT = {
         "今の位置の1コマを、動画から読み直します。表示がおかしい・真っ黒なときに押してください\n"
         "（動画の長さを調べられていなければ、調べ直します）。",
     "ffmpegの場所を指定…": "プレビュー用の ffmpeg.exe を選びます（「通常用ffmpeg」の欄と同じ設定です）。",
+    "この場面を覚える": "今表示している場面を「チェックする場面」に登録します（1本の動画に8つまで）。\n"
+                        "明るい場面・暗い場面・顔のアップなどを覚えておくと、設定を変えたあとすぐ見直せます。\n"
+                        "覚えた場面は動画ごとに記録され、次に同じ動画を追加したときも残っています。",
+    "選んだ場面を忘れる": "リストで選んだ場面を消します（Delete キーでも可）。",
+    "まとめてコピー": "覚えた場面すべての比較画像（左＝補正前／右＝補正後）を縦に並べた1枚を、クリップボードにコピーします。\n"
+                      "設定を変えるたびに押せば、全場面の見え方を一度に確認・相談できます。",
+    "まとめて保存…": "覚えた場面すべての比較画像を縦に並べた1枚を、PNG / JPEG で保存します。",
+    "移動": "左の欄に入れたフレーム番号か時間の場面へ移動します（Enter キーでも可）。",
     "コピー":
         "左に補正前、右に補正後を並べた比較画像を、クリップボードにコピーします。\n"
         "チャットに Ctrl+V で貼り付けられます。下にファイル名・フレーム番号・設定も入ります。",
@@ -1631,6 +1680,9 @@ class App:
         self.files = []
         self.cuts = {}             # 動画のパス → [(開始フレーム, 終了フレーム), ...]
         self.fsets = {}            # 動画のパス → その動画の設定（FILE_KEYS の分）
+        self.marks = {}            # 動画のパス → チェックする場面（フレーム番号のリスト）
+        self.frame_cache = {}      # 取り出した1コマの控え（同じ場面をすぐ出すため）
+        self._batch_running = False
         self.clip = None           # 「設定をコピー」で覚えた設定
         self._loading = False      # 動画を選び替えて設定欄を書き換えている最中か
         self._save_job = None
@@ -1711,6 +1763,9 @@ class App:
                               "Ctrl／Shift で複数選ぶと、変えた項目だけ選んだ全部にまとめて反映されます（Ctrl+A で全部選択）。\n"
                               "設定はファイル名ごとに自動で記録され、同じ名前の動画を次に追加したときに戻ります。\n"
                               "ここに動画やフォルダをドラッグ＆ドロップしても追加できます。")
+        ToolTip(self.e_jump, "移動したい場面を入れて Enter。\n"
+                             "数字だけならフレーム番号（例：18743）、「:」を入れると時間（例：10:25.4、1:02:03）です。")
+        ToolTip(self.marklist, "覚えた場面のリストです。クリックすると、その場面へ移動します。")
         ToolTip(self.cb_preset, "保存してあるプリセットです。選んでから「選んだ動画に適用」を押します。")
         ToolTip(self.edit_label, "② の設定が、どの動画に反映されるかを表示しています。")
         ToolTip(self.img_label, "押している間は「補正前」、離すと「補正後（Levels/Tweakの見本）」を表示します。\n"
@@ -1992,6 +2047,7 @@ class App:
 
         self.build_bottom(bottom)
         self.build_image_preview()
+        self.build_marks_panel()
         self.build_cut_panel()
 
     def build_bottom(self, bottom):
@@ -2049,6 +2105,17 @@ class App:
         self.time_label = ttk.Label(f5, text="", font=("Consolas", 10))
         self.time_label.pack(pady=(2, 0))
 
+        jrow = ttk.Frame(f5)
+        jrow.pack(pady=(2, 0))
+        ttk.Label(jrow, text="移動先").pack(side="left")
+        self.jump_var = tk.StringVar()
+        self.e_jump = ttk.Entry(jrow, textvariable=self.jump_var, width=12)
+        self.e_jump.pack(side="left", padx=4)
+        self.e_jump.bind("<Return>", lambda e: self.jump_to())
+        self.e_jump.bind("<KP_Enter>", lambda e: self.jump_to())
+        ttk.Button(jrow, text="移動", width=6, command=self.jump_to).pack(side="left")
+        ttk.Label(jrow, text="例：18743 / 10:25.4", foreground="#666").pack(side="left", padx=(6, 0))
+
         srow = ttk.Frame(f5)
         srow.pack(pady=4)
         ttk.Button(srow, text="◀◀ 1秒", width=8, command=lambda: self.step(-1, True)).pack(side="left", padx=2)
@@ -2084,6 +2151,33 @@ class App:
                              "pip install pillow numpy\nを実行して、再起動してください")
         else:
             self.set_message("動画を追加すると、ここに1コマ表示されます")
+
+    def build_marks_panel(self):
+        f = ttk.LabelFrame(self.right, text="チェックする場面（同じ場面をすぐ見直す用）")
+        f.pack(fill="x", pady=(8, 0))
+        row = ttk.Frame(f); row.pack(fill="x", padx=8, pady=(6, 2))
+        self.b_mark = ttk.Button(row, text="この場面を覚える", command=self.add_mark)
+        self.b_mark.pack(side="left")
+        ttk.Button(row, text="選んだ場面を忘れる", command=self.delete_mark).pack(side="left", padx=4)
+        lrow = ttk.Frame(f); lrow.pack(fill="x", padx=8, pady=2)
+        self.marklist = tk.Listbox(lrow, height=4, exportselection=False, activestyle="none")
+        sb = ttk.Scrollbar(lrow, orient="vertical", command=self.marklist.yview)
+        self.marklist.configure(yscrollcommand=sb.set)
+        self.marklist.pack(side="left", fill="x", expand=True)
+        sb.pack(side="left", fill="y")
+        self.marklist.bind("<<ListboxSelect>>", lambda e: self.goto_mark())
+        self.marklist.bind("<Delete>", lambda e: self.delete_mark())
+        crow = ttk.Frame(f); crow.pack(fill="x", padx=8, pady=(2, 8))
+        ttk.Label(crow, text="覚えた場面の比較画像：").pack(side="left")
+        self.b_mcopy = ttk.Button(crow, text="まとめてコピー", command=lambda: self.batch_compare("copy"))
+        self.b_mcopy.pack(side="left", padx=4)
+        self.b_msave = ttk.Button(crow, text="まとめて保存…", command=lambda: self.batch_compare("save"))
+        self.b_msave.pack(side="left")
+        if not HAS_PREVIEW:
+            for b in (self.b_mark, self.b_mcopy, self.b_msave):
+                b.config(state="disabled")
+        elif os.name != "nt":
+            self.b_mcopy.config(state="disabled")
 
     def build_cut_panel(self):
         f = ttk.LabelFrame(self.right, text="カット編集（残す区間を登録。登録しなければ全体を使います）")
@@ -2185,13 +2279,14 @@ class App:
         if path in self.files:
             return 0
         self.forget_file(path)      # 以前同じ名前のファイルを読んでいても、調べ直す
-        settings, cuts = self.recall(path)
+        settings, cuts, marks = self.recall(path)
         if settings is not None:
             self._restored += 1
             s = dict(base)
             s.update({k: v for k, v in settings.items() if k in FILE_KEYS})
             self.fsets[path] = s
             self.cuts[path] = cuts
+            self.marks[path] = marks
         else:
             self.fsets[path] = dict(base)
         self.files.append(path)
@@ -2363,7 +2458,7 @@ class App:
         files = self.record.get("files", {})
         ent = files.get(os.path.basename(path).lower())
         if not ent:
-            return None, None
+            return None, None, []
         settings = ent.get("settings")
         sig = self._file_sig(path)
         if sig and ent.get("size") == sig[0]:
@@ -2371,9 +2466,13 @@ class App:
                 cuts = normalize_cuts(ent.get("cuts") or [])
             except (ValueError, TypeError):
                 cuts = []
+            try:
+                marks = sorted({int(x) for x in ent.get("marks") or []})
+            except (ValueError, TypeError):
+                marks = []
         else:
-            cuts = []        # 同じ名前でも中身が違う（取り込み直した）ので、前の区間は使わない
-        return (settings if isinstance(settings, dict) else None), cuts
+            cuts, marks = [], []   # 同じ名前でも中身が違う（取り込み直した）ので、前の区間・場面は使わない
+        return (settings if isinstance(settings, dict) else None), cuts, marks
 
     def remember_files(self):
         """一覧にある動画の設定を、記録に書き込む（ファイル名ごとに1件）"""
@@ -2388,6 +2487,7 @@ class App:
                 "updated": now,
                 "settings": dict(self.fsets.get(p, {})),
                 "cuts": [list(x) for x in self.cuts.get(p, [])],
+                "marks": list(self.marks.get(p, [])),
             }
         if len(files) > RECORD_MAX_FILES:      # 古いものから忘れる
             for k in sorted(files, key=lambda k: files[k].get("updated", 0))[:len(files) - RECORD_MAX_FILES]:
@@ -2430,6 +2530,7 @@ class App:
             self.forget_file(p)
             self.files.remove(p)
             self.fsets.pop(p, None)
+            self.marks.pop(p, None)
         self.select_index(first)             # 消したところの次（なければ前）のファイルを選び直す
         self.update_hint()
         self.save_settings()
@@ -2440,6 +2541,7 @@ class App:
             self.listbox.delete(p)
             self.forget_file(p)
             self.fsets.pop(p, None)
+            self.marks.pop(p, None)
         self.files.clear()
         self.update_hint()
         self.on_select()
@@ -2643,7 +2745,11 @@ class App:
             self.root.config(cursor="watch")
             self.root.update_idletasks()
             try:
-                self.raw = grab_frame(ffmpeg, path, t, o["deint"], o["field"])
+                if not force and key in self.frame_cache:
+                    self.raw = self.frame_cache[key]
+                else:
+                    self.raw = grab_frame(ffmpeg, path, t, o["deint"], o["field"])
+                    self.cache_frame(key, self.raw)
                 self.frame_key = key
             except Exception as e:
                 self.raw = None
@@ -2693,6 +2799,166 @@ class App:
 
     def show_before(self):
         self._show(self.before_img, "▼ 補正前")
+
+    # ---------- 移動先の入力・チェックする場面
+    def cache_frame(self, key, img):
+        self.frame_cache[key] = img
+        while len(self.frame_cache) > 24:          # 古いものから捨てる
+            self.frame_cache.pop(next(iter(self.frame_cache)))
+
+    def jump_to(self):
+        info = self.cur_info()
+        if not self.cur_path:
+            return "break"
+        try:
+            n = parse_position(self.jump_var.get(), info["fps"] if info else 0,
+                               info["nframes"] if info else 0)
+        except ValueError as e:
+            messagebox.showwarning(APP_TITLE, str(e))
+            return "break"
+        self.goto_frame(n)
+        return "break"
+
+    def goto_frame(self, n):
+        self.pos.set(n)
+        self.update_pos_labels()
+        self.schedule_image()
+
+    def refresh_marks(self):
+        self.marklist.delete(0, "end")
+        info = self.cur_info()
+        for i, n in enumerate(self.marks.get(self.cur_path, []) if self.cur_path else [], 1):
+            t = fmt_tc(n, info["fps"]) if info else "?"
+            self.marklist.insert("end", f"{i}.  {t}   （フレーム {n}）")
+
+    def add_mark(self):
+        if not self.cur_path or not self.cur_info():
+            messagebox.showinfo(APP_TITLE, "先に動画を選んで、画像プレビューに場面を表示してください。")
+            return
+        n = self.cur_frame()
+        lst = self.marks.setdefault(self.cur_path, [])
+        if n in lst:
+            self.status.config(text=f"フレーム {n} はもう覚えています")
+            return
+        if len(lst) >= 8:
+            messagebox.showinfo(APP_TITLE, "覚えておける場面は8つまでです。いらない場面を「選んだ場面を忘れる」で消してください。")
+            return
+        lst.append(n)
+        lst.sort()
+        self.refresh_marks()
+        self.marklist.selection_set(lst.index(n))
+        self.status.config(text=f"フレーム {n} を覚えました（{len(lst)} 場面）")
+        self.schedule_save()
+
+    def delete_mark(self):
+        sel = self.marklist.curselection()
+        lst = self.marks.get(self.cur_path, [])
+        if not sel or not lst:
+            return
+        for i in reversed(sel):
+            if i < len(lst):
+                del lst[i]
+        self.refresh_marks()
+        self.schedule_save()
+
+    def goto_mark(self):
+        sel = self.marklist.curselection()
+        lst = self.marks.get(self.cur_path, [])
+        if sel and sel[0] < len(lst):
+            self.goto_frame(lst[sel[0]])
+
+    def batch_compare(self, mode):
+        """覚えた場面の比較画像（補正前｜補正後）を、縦に並べた1枚にする"""
+        if self._batch_running:
+            return
+        path, info = self.cur_path, self.cur_info()
+        frames = list(self.marks.get(path, [])) if path else []
+        if not frames:
+            messagebox.showinfo(APP_TITLE, "覚えた場面がありません。\n"
+                                           "見比べたい場面で「この場面を覚える」を押してください。")
+            return
+        ffmpeg = self.tool("ffmpeg")
+        if not ffmpeg:
+            messagebox.showwarning(APP_TITLE, "ffmpegが見つかりません。")
+            return
+        o = self.options()
+        try:
+            parse_color(o)
+        except ValueError as e:
+            messagebox.showwarning(APP_TITLE, str(e))
+            return
+        save_to = None
+        if mode == "save":
+            base = os.path.splitext(os.path.basename(path))[0]
+            save_to = filedialog.asksaveasfilename(
+                title="比較画像の保存先", defaultextension=".png",
+                initialdir=os.path.dirname(path), initialfile=f"{base}_比較_{len(frames)}場面.png",
+                filetypes=[("PNG画像", "*.png"), ("JPEG画像", "*.jpg")])
+            if not save_to:
+                return
+        self._batch_running = True
+        for b in (self.b_mcopy, self.b_msave):
+            b.config(state="disabled")
+        name = os.path.basename(path)
+        prog = {"i": 0, "result": None}          # 作業スレッドとのやりとり（画面の操作は表のスレッドだけで行う）
+
+        def work():
+            try:
+                imgs = []
+                for i, n in enumerate(frames, 1):
+                    prog["i"] = i
+                    key = (path, n, o["deint"], o["field"], ffmpeg)
+                    raw = self.frame_cache.get(key)
+                    if raw is None:
+                        t = max(0.0, (n - 0.3) / info["fps"]) if info else 0.0
+                        raw = grab_frame(ffmpeg, path, t, o["deint"], o["field"])
+                    title = f"{name}   フレーム {n}" + (f"（{fmt_tc(n, info['fps'])}）" if info else "")
+                    imgs.append(make_compare_image(raw, o, title, show_settings=False))
+                prog["result"] = ("ok", stack_compare_images(imgs, o))
+            except Exception as e:
+                prog["result"] = ("err", e)
+
+        def poll():
+            if prog["result"] is None:
+                self.status.config(text=f"比較画像を作っています…（{prog['i']}/{len(frames)} 場面）")
+                self.root.after(150, poll)
+                return
+            kind, val = prog["result"]
+            if kind == "ok":
+                self._batch_done(val, mode, save_to, len(frames))
+            else:
+                self._batch_done(None, mode, save_to, 0, val)
+
+        threading.Thread(target=work, daemon=True).start()
+        self.root.after(150, poll)
+
+    def _batch_done(self, img, mode, save_to, count, err=None):
+        self._batch_running = False
+        self.b_msave.config(state="normal")
+        if os.name == "nt":
+            self.b_mcopy.config(state="normal")
+        if img is None:
+            self.status.config(text="")
+            messagebox.showwarning(APP_TITLE, f"比較画像を作れませんでした。\n{err}")
+            return
+        if mode == "copy":
+            try:
+                ok = copy_image_to_clipboard(img)
+            except Exception:
+                ok = False
+            if ok:
+                self.status.config(text=f"{count} 場面の比較画像をコピーしました。チャットなどに Ctrl+V で貼り付けられます。")
+            else:
+                messagebox.showwarning(APP_TITLE, "クリップボードにコピーできませんでした。「まとめて保存…」を使ってください。")
+        else:
+            try:
+                if save_to.lower().endswith((".jpg", ".jpeg")):
+                    img.save(save_to, quality=95)
+                else:
+                    img.save(save_to)
+                self.status.config(text=f"{count} 場面の比較画像を保存しました：{save_to}")
+            except OSError as e:
+                messagebox.showwarning(APP_TITLE, f"保存できませんでした。\n{e}")
 
     # ---------- 比較画像（補正前｜補正後）
     def _compare_image(self):
@@ -2880,6 +3146,7 @@ class App:
             self.load_frame()
 
     def refresh_cut_list(self):
+        self.refresh_marks()
         if self.cur_path:
             self.update_row(self.cur_path)          # 一覧の「処理」列（区間の数・24p）を更新
         self.seglist.delete(*self.seglist.get_children())
