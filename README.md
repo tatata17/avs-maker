@@ -1,6 +1,7 @@
 # AVS かんたん作成ツール（avs-maker）
 
-**📖 使い方のページ：https://tatata17.github.io/avs-maker/**（更新履歴：https://tatata17.github.io/avs-maker/#history ） （ツールの「使い方」ボタンからも開けます）
+- 📖 **[使い方のページ](https://tatata17.github.io/avs-maker/)**（ツールの「使い方」ボタンからも開けます）
+- 📝 **[更新履歴](https://tatata17.github.io/avs-maker/#history)**
 
 VHS などのアナログ取り込み動画から AviSynth のスクリプト（.avs）を作り、そのまま ffmpeg（HEVC / NVENC）で mp4 にエンコードする Windows 用の GUI ツールです（`avs_maker.pyw`）。
 
