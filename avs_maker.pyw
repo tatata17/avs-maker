@@ -51,7 +51,7 @@ except Exception:
 HAS_PREVIEW = HAS_IMG and HAS_TKIMG
 
 APP_TITLE = "AVS かんたん作成ツール"
-APP_VERSION = "1.3.1"
+APP_VERSION = "1.4.0"
 
 # 更新の確認先（GitHub）。version.json に最新の版番号と変更内容、avs_maker.pyw に本体を置く
 UPDATE_REPO = "tatata17/avs-maker"
@@ -1455,6 +1455,18 @@ def fetch_latest_info():
     if not isinstance(data, dict) or "version" not in data:
         raise ValueError("version.json の中身が正しくありません")
     return data
+
+
+def fetch_notes_since(current):
+    """changelog.json から、今の版より新しい版の変更内容を集める → [(版, [内容…]), …]（新しい順）"""
+    data = json.loads(_http_get(UPDATE_RAW + "changelog.json").decode("utf-8"))
+    out = []
+    for r in data.get("releases", []):
+        v = str(r.get("version", ""))
+        if re.match(r"\d", v) and _version_tuple(v) > _version_tuple(current):
+            notes = r.get("notes") or []
+            out.append((v, [notes] if isinstance(notes, str) else list(notes)))
+    return out
 
 
 def download_new_version(expected_version):
@@ -3986,6 +3998,10 @@ class App:
         def work():
             try:
                 info = fetch_latest_info()
+                try:
+                    info["since"] = fetch_notes_since(APP_VERSION)   # 間の版の変更内容も見せる
+                except Exception:
+                    info["since"] = None
                 self.root.after(0, lambda: self._update_found(info))
             except Exception as e:
                 self.root.after(0, lambda e=e: self._update_failed(e))
@@ -4005,10 +4021,20 @@ class App:
             self.status.config(text=f"最新版です（v{APP_VERSION}）")
             messagebox.showinfo(APP_TITLE, f"最新版です（v{APP_VERSION}）。")
             return
-        notes = info.get("notes") or []
-        if isinstance(notes, str):
-            notes = [notes]
-        text = "\n".join(f"・{n}" for n in notes[:15]) or "（変更内容の説明はありません）"
+        since = info.get("since")
+        if since:
+            lines = []
+            for v, ns_ in since:
+                lines.append(f"【v{v}】")
+                lines += [f"・{n}" for n in ns_]
+            if len(lines) > 24:
+                lines = lines[:24] + ["…（続きは「使い方」ページの更新履歴へ）"]
+            text = "\n".join(lines)
+        else:
+            notes = info.get("notes") or []
+            if isinstance(notes, str):
+                notes = [notes]
+            text = "\n".join(f"・{n}" for n in notes[:15]) or "（変更内容の説明はありません）"
         if not messagebox.askyesno(
                 APP_TITLE,
                 f"新しい版があります。\n\nv{APP_VERSION} → v{latest}\n\n{text}\n\n"
