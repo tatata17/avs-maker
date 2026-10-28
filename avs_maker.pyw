@@ -51,7 +51,7 @@ except Exception:
 HAS_PREVIEW = HAS_IMG and HAS_TKIMG
 
 APP_TITLE = "AVS かんたん作成ツール"
-APP_VERSION = "1.4.0"
+APP_VERSION = "1.4.1"
 
 # 更新の確認先（GitHub）。version.json に最新の版番号と変更内容、avs_maker.pyw に本体を置く
 UPDATE_REPO = "tatata17/avs-maker"
@@ -1600,7 +1600,7 @@ TIPS_BY_TEXT = {
     "選んだ動画に貼り付け": "「設定をコピー」で覚えた設定を、一覧で選んでいる動画（複数可）に貼り付けます。\nカット区間はそのままです。",
     "全部の動画に適用": "今の設定を、一覧にある全部の動画に適用します（確認が出ます）。カット区間はそのままです。",
     "選んだ動画に適用": "左で選んだプリセットの設定を、一覧で選んでいる動画（複数可）に適用します。",
-    "今の設定を保存…": "今の設定に名前を付けて、プリセットとして保存します（例：日本一の男の魂 2巻）。\n同じ名前なら上書きします。",
+    "今の設定を保存…": "今の設定に名前を付けて、プリセットとして保存します（例：アニメA 2巻）。\n同じ名前なら上書きします。",
     "プリセットを削除": "左で選んでいるプリセットを削除します。",
     # 実行
     "avsだけ作成": "avs ファイルだけを作ります（エンコードはしません）。VirtualDub などで開いて確認したいとき用。",
@@ -3134,7 +3134,7 @@ class App:
 
     def save_preset(self):
         from tkinter import simpledialog
-        name = simpledialog.askstring(APP_TITLE, "プリセットの名前（例：日本一の男の魂 2巻）",
+        name = simpledialog.askstring(APP_TITLE, "プリセットの名前（例：アニメA 2巻）",
                                       initialvalue=self.preset_var.get(), parent=self.root)
         if not name or not name.strip():
             return
