@@ -52,7 +52,7 @@ except Exception:
 HAS_PREVIEW = HAS_IMG and HAS_TKIMG
 
 APP_TITLE = "AVS かんたん作成ツール"
-APP_VERSION = "1.4.4"
+APP_VERSION = "1.4.5"
 
 # 更新の確認先（GitHub）。version.json に最新の版番号と変更内容、avs_maker.pyw に本体を置く
 UPDATE_REPO = "tatata17/avs-maker"
@@ -1450,17 +1450,39 @@ def _http_get(url, timeout=20):
         return r.read()
 
 
+class UpdateMismatch(Exception):
+    """version.json と本体の版番号が食い違う（公開した直後で、配信が追いついていないとき）"""
+
+
+def fetch_latest_commit():
+    """main の最新コミットの番号（sha）を返す。調べられなければ None"""
+    try:
+        import urllib.request
+        req = urllib.request.Request(
+            f"https://api.github.com/repos/{UPDATE_REPO}/commits/{UPDATE_BRANCH}",
+            headers={"User-Agent": f"avs_maker/{APP_VERSION}", "Accept": "application/vnd.github.sha"})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            sha = r.read().decode("ascii", "replace").strip()
+        return sha if re.fullmatch(r"[0-9a-f]{40}", sha) else None
+    except Exception:
+        return None
+
+
 def fetch_latest_info():
-    """GitHub の version.json を読む → {"version": "1.2.0", "notes": [...]}"""
-    data = json.loads(_http_get(UPDATE_RAW + "version.json").decode("utf-8"))
+    """GitHub の version.json を読む → {"version": "1.2.0", "notes": [...], "_base": 取ってきた場所}
+    同じコミットから version.json と本体を取るので、公開した直後でも2つの版が食い違わない"""
+    sha = fetch_latest_commit()
+    base = f"https://raw.githubusercontent.com/{UPDATE_REPO}/{sha}/" if sha else UPDATE_RAW
+    data = json.loads(_http_get(base + "version.json").decode("utf-8"))
     if not isinstance(data, dict) or "version" not in data:
         raise ValueError("version.json の中身が正しくありません")
+    data["_base"] = base
     return data
 
 
-def fetch_notes_since(current):
+def fetch_notes_since(current, base=None):
     """changelog.json から、今の版より新しい版の変更内容を集める → [(版, [内容…]), …]（新しい順）"""
-    data = json.loads(_http_get(UPDATE_RAW + "changelog.json").decode("utf-8"))
+    data = json.loads(_http_get((base or UPDATE_RAW) + "changelog.json").decode("utf-8"))
     out = []
     for r in data.get("releases", []):
         v = str(r.get("version", ""))
@@ -1470,14 +1492,14 @@ def fetch_notes_since(current):
     return out
 
 
-def download_new_version(expected_version):
+def download_new_version(expected_version, base=UPDATE_RAW):
     """新しい avs_maker.pyw を取ってきて、プログラムとして正しく読めるか確かめてから返す（bytes）"""
-    data = _http_get(UPDATE_RAW + "avs_maker.pyw", timeout=60)
+    data = _http_get(base + "avs_maker.pyw", timeout=60)
     text = data.decode("utf-8")
     compile(text, "avs_maker.pyw", "exec")             # 壊れたファイルなら、ここでエラーになる
     m = re.search(r'^APP_VERSION\s*=\s*"([^"]+)"', text, re.M)
     if not m or _version_tuple(m.group(1)) != _version_tuple(expected_version):
-        raise ValueError("ダウンロードしたファイルの版番号が、案内された版と一致しません。"
+        raise UpdateMismatch("ダウンロードしたファイルの版番号が、案内された版と一致しません。"
                          "少し時間をおいてから、もう一度お試しください。")
     return data
 
@@ -4001,7 +4023,7 @@ class App:
             try:
                 info = fetch_latest_info()
                 try:
-                    info["since"] = fetch_notes_since(APP_VERSION)   # 間の版の変更内容も見せる
+                    info["since"] = fetch_notes_since(APP_VERSION, info.get("_base"))   # 間の版の変更内容も見せる
                 except Exception:
                     info["since"] = None
                 self.root.after(0, lambda: self._update_found(info))
@@ -4012,6 +4034,11 @@ class App:
     def _update_failed(self, e):
         self.b_update.config(state="normal")
         self.status.config(text="")
+        if isinstance(e, UpdateMismatch):     # 通信の問題ではないので、ネットの確認は案内しない
+            messagebox.showwarning(APP_TITLE, "更新できませんでした（今の版のままです）。\n\n"
+                                              "新しい版を公開した直後で、GitHub の配信がまだ追いついていないようです。\n"
+                                              "数分おいてから、もう一度「更新を確認」を押してください。")
+            return
         messagebox.showwarning(APP_TITLE, "更新を確認できませんでした。\n"
                                           "インターネットにつながっているか確認してください。\n\n"
                                           f"{e}")
@@ -4049,7 +4076,7 @@ class App:
 
         def work():
             try:
-                data = download_new_version(latest)
+                data = download_new_version(latest, info.get("_base") or UPDATE_RAW)
                 self.root.after(0, lambda: self._update_install(data, latest))
             except Exception as e:
                 self.root.after(0, lambda e=e: self._update_failed(e))
