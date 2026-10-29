@@ -23,6 +23,7 @@ import queue
 import re
 import shutil
 import subprocess
+import sys
 import threading
 import time
 import zlib
@@ -51,7 +52,7 @@ except Exception:
 HAS_PREVIEW = HAS_IMG and HAS_TKIMG
 
 APP_TITLE = "AVS かんたん作成ツール"
-APP_VERSION = "1.4.1"
+APP_VERSION = "1.4.2"
 
 # 更新の確認先（GitHub）。version.json に最新の版番号と変更内容、avs_maker.pyw に本体を置く
 UPDATE_REPO = "tatata17/avs-maker"
@@ -4324,7 +4325,19 @@ class App:
         self.status.config(text="中止しています…")
 
 
+def set_app_id():
+    """タスクバーで、ほかの Python のツールと1つのアイコンにまとめられないよう、このアプリ専用のIDを付ける"""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("tatata17.avs_maker")
+    except Exception:
+        pass      # 古いWindowsなどで使えなくても、ツール自体はそのまま動かす
+
+
 def main():
+    set_app_id()          # ウインドウを作る前に設定する
     root = TkinterDnD.Tk() if HAS_DND else tk.Tk()
     App(root)
     root.mainloop()
