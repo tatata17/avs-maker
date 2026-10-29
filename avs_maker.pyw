@@ -52,7 +52,7 @@ except Exception:
 HAS_PREVIEW = HAS_IMG and HAS_TKIMG
 
 APP_TITLE = "AVS かんたん作成ツール"
-APP_VERSION = "1.4.2"
+APP_VERSION = "1.4.3"
 
 # 更新の確認先（GitHub）。version.json に最新の版番号と変更内容、avs_maker.pyw に本体を置く
 UPDATE_REPO = "tatata17/avs-maker"
@@ -2791,7 +2791,8 @@ class App:
         self.b_update = ttk.Button(brow, text="更新を確認", command=self.check_update)
         self.b_update.pack(side="left", padx=(8, 4))
         ttk.Button(brow, text="使い方", command=self.open_help).pack(side="left", padx=(0, 8))
-        ttk.Label(brow, text=f"v{APP_VERSION}", foreground="#888").pack(side="left")
+        self.ver_label = ttk.Label(brow, text=f"v{APP_VERSION}", foreground="#888")
+        self.ver_label.pack(side="left")
         self.b_enc = ttk.Button(brow, text="avsを作成してエンコード",
                                 command=lambda: self.make_all(True))
         self.b_enc.pack(side="right", ipadx=10, ipady=4)
@@ -4325,21 +4326,92 @@ class App:
         self.status.config(text="中止しています…")
 
 
+APP_ID = "tatata17.avs_maker"
+APP_ID_STATUS = []        # タスクバー用IDの設定結果（版番号にマウスを置くと見られる）
+
+
 def set_app_id():
-    """タスクバーで、ほかの Python のツールと1つのアイコンにまとめられないよう、このアプリ専用のIDを付ける"""
+    """タスクバーで、ほかの Python のツールと1つのアイコンにまとめられないよう、このアプリ専用のIDを付ける（プロセス全体）"""
     if sys.platform != "win32":
         return
     try:
         import ctypes
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("tatata17.avs_maker")
-    except Exception:
-        pass      # 古いWindowsなどで使えなくても、ツール自体はそのまま動かす
+        f = ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID
+        f.argtypes = [ctypes.c_wchar_p]
+        f.restype = ctypes.c_long
+        hr = f(APP_ID)
+        APP_ID_STATUS.append("プロセス：OK" if hr == 0 else f"プロセス：失敗（0x{hr & 0xFFFFFFFF:08X}）")
+    except Exception as e:
+        APP_ID_STATUS.append(f"プロセス：失敗（{e}）")
+
+
+def set_window_app_id(root):
+    """ウインドウそのものにも同じIDを付ける（プロセス全体の設定が効かない環境向けの、念のための二重の設定）"""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        import uuid
+        from ctypes import wintypes
+
+        class GUID(ctypes.Structure):
+            _fields_ = [("Data1", wintypes.DWORD), ("Data2", wintypes.WORD),
+                        ("Data3", wintypes.WORD), ("Data4", ctypes.c_ubyte * 8)]
+
+        class PROPERTYKEY(ctypes.Structure):
+            _fields_ = [("fmtid", GUID), ("pid", wintypes.DWORD)]
+
+        class PROPVARIANT(ctypes.Structure):      # 文字列（VT_LPWSTR）だけを入れる形
+            _fields_ = [("vt", ctypes.c_ushort), ("r1", ctypes.c_ushort), ("r2", ctypes.c_ushort),
+                        ("r3", ctypes.c_ushort), ("pwszVal", ctypes.c_wchar_p), ("pad", ctypes.c_void_p)]
+
+        def make_guid(text):
+            u = uuid.UUID(text)
+            return GUID(u.time_low, u.time_mid, u.time_hi_version, (ctypes.c_ubyte * 8)(*u.bytes[8:]))
+
+        user32, shell32 = ctypes.windll.user32, ctypes.windll.shell32
+        user32.GetParent.argtypes = [wintypes.HWND]
+        user32.GetParent.restype = wintypes.HWND
+        shell32.SHGetPropertyStoreForWindow.argtypes = [wintypes.HWND, ctypes.POINTER(GUID),
+                                                        ctypes.POINTER(ctypes.c_void_p)]
+        shell32.SHGetPropertyStoreForWindow.restype = ctypes.c_long
+
+        root.update_idletasks()
+        hwnd = user32.GetParent(root.winfo_id()) or root.winfo_id()   # Tk の外側の枠のウインドウ
+        store = ctypes.c_void_p()
+        iid = make_guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99")       # IPropertyStore
+        hr = shell32.SHGetPropertyStoreForWindow(hwnd, ctypes.byref(iid), ctypes.byref(store))
+        if hr != 0 or not store:
+            APP_ID_STATUS.append(f"ウインドウ：失敗（0x{hr & 0xFFFFFFFF:08X}）")
+            return
+        vtbl = ctypes.cast(ctypes.cast(store, ctypes.POINTER(ctypes.c_void_p))[0],
+                           ctypes.POINTER(ctypes.c_void_p))
+        release = ctypes.WINFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)(vtbl[2])
+        set_value = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, ctypes.POINTER(PROPERTYKEY),
+                                       ctypes.POINTER(PROPVARIANT))(vtbl[6])
+        commit = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p)(vtbl[7])
+        try:
+            key = PROPERTYKEY(make_guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3"), 5)   # AppUserModel.ID
+            pv = PROPVARIANT()
+            pv.vt = 31                                                # VT_LPWSTR
+            pv.pwszVal = APP_ID
+            hr = set_value(store, ctypes.byref(key), ctypes.byref(pv))
+            if hr == 0:
+                hr = commit(store)
+        finally:
+            release(store)
+        APP_ID_STATUS.append("ウインドウ：OK" if hr == 0 else f"ウインドウ：失敗（0x{hr & 0xFFFFFFFF:08X}）")
+    except Exception as e:
+        APP_ID_STATUS.append(f"ウインドウ：失敗（{e}）")
 
 
 def main():
     set_app_id()          # ウインドウを作る前に設定する
     root = TkinterDnD.Tk() if HAS_DND else tk.Tk()
-    App(root)
+    app = App(root)
+    set_window_app_id(root)
+    if APP_ID_STATUS:
+        ToolTip(app.ver_label, "タスクバー用のID（" + APP_ID + "）\n" + "\n".join(APP_ID_STATUS))
     root.mainloop()
 
 
