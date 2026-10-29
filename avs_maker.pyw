@@ -52,7 +52,7 @@ except Exception:
 HAS_PREVIEW = HAS_IMG and HAS_TKIMG
 
 APP_TITLE = "AVS かんたん作成ツール"
-APP_VERSION = "1.4.3"
+APP_VERSION = "1.4.4"
 
 # 更新の確認先（GitHub）。version.json に最新の版番号と変更内容、avs_maker.pyw に本体を置く
 UPDATE_REPO = "tatata17/avs-maker"
@@ -4405,9 +4405,37 @@ def set_window_app_id(root):
         APP_ID_STATUS.append(f"ウインドウ：失敗（{e}）")
 
 
+def make_app_icon(size):
+    """このツール専用のアイコン（オレンジの角丸に、白いビデオテープ。左右のリールの色が補正前/補正後）"""
+    from PIL import Image, ImageDraw
+    S = 512
+    im = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    d.rounded_rectangle((8, 8, S - 8, S - 8), radius=110, fill=(232, 112, 40, 255))
+    d.rounded_rectangle((44, 112, S - 44, S - 112), radius=40, fill=(255, 255, 255, 255))   # テープ本体
+    d.rounded_rectangle((92, 158, S - 92, 296), radius=30, fill=(52, 40, 60, 255))          # 窓
+    for cx, col in ((172, (160, 160, 168, 255)), (S - 172, (80, 196, 255, 255))):           # リール：灰（前）/水色（後）
+        d.ellipse((cx - 54, 227 - 54, cx + 54, 227 + 54), fill=col)
+        d.ellipse((cx - 20, 227 - 20, cx + 20, 227 + 20), fill=(52, 40, 60, 255))
+    d.rounded_rectangle((132, 330, S - 132, 366), radius=14, fill=(232, 112, 40, 255))      # ラベル
+    return im.resize((size, size), Image.LANCZOS)
+
+
+def set_app_icon(root):
+    """ウインドウの左上とタスクバーのアイコンを、このツール専用の絵にする（別ウインドウにも同じものが付く）"""
+    if not HAS_PREVIEW:
+        return          # Pillow がないときは、いつもの羽根のまま
+    try:
+        root._app_icons = [ImageTk.PhotoImage(make_app_icon(n)) for n in (16, 24, 32, 48, 64, 256)]
+        root.iconphoto(True, *root._app_icons)
+    except Exception:
+        pass
+
+
 def main():
     set_app_id()          # ウインドウを作る前に設定する
     root = TkinterDnD.Tk() if HAS_DND else tk.Tk()
+    set_app_icon(root)
     app = App(root)
     set_window_app_id(root)
     if APP_ID_STATUS:
