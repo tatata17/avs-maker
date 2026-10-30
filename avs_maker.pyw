@@ -52,7 +52,7 @@ except Exception:
 HAS_PREVIEW = HAS_IMG and HAS_TKIMG
 
 APP_TITLE = "AVS かんたん作成ツール"
-APP_VERSION = "1.4.5"
+APP_VERSION = "1.4.6"
 
 # 更新の確認先（GitHub）。version.json に最新の版番号と変更内容、avs_maker.pyw に本体を置く
 UPDATE_REPO = "tatata17/avs-maker"
@@ -92,6 +92,7 @@ DEFAULTS = {
     "out_mode": "same",   # same = 動画と同じ場所 / folder = 指定フォルダ
     "out_dir": "",
     "cq": "20",           # エンコードの画質（小さいほど高画質）
+    "cut_disp": "both",   # 残す区間の表示（time = 時間 / frame = フレーム番号 / both = 両方）
     "show_enc": False,    # ③④（保存先・エンコード）の欄を開いておくか（ffmpeg が見つからないときは自動で開く）
     # ffmpegの場所の初期値（初回起動時だけ使う。変えると、次からは変えた場所が使われる）
     "ffmpeg": r"C:\ffmpeg\ffmpegNEW.exe",     # 通常用（AviSynth Neo を読む側）
@@ -1672,6 +1673,7 @@ TIPS_BY_TEXT = {
 
 # 入力欄の説明（設定の名前で対応づけ）
 TIPS_BY_VAR = {
+    "cut_disp": "「残す区間」のリストの表示を切り替えます。\n時間 … 0:01:02.3 のような時間\nフレーム番号 … #1863 のような、取り込んだままのコマ番号\n両方 … 時間とフレーム番号を並べて表示",
     "source": "動画の読み込み方法です。自動なら、avi は AviSource、mp4 / mkv などは LWLibavVideoSource を使います。",
     "field": "インターレースのフィールドの順番です。VHSの取り込みは、ほぼ TFF（トップファースト）です。",
     "plug24": "24p化（AviSynth+ 3.7.5）で読み込むプラグインのフォルダです。\n"
@@ -2946,6 +2948,12 @@ class App:
         self.cut_total = ttk.Label(row2, text="", foreground="#333")
         self.cut_total.pack(side="right")
 
+        drow = ttk.Frame(f); drow.pack(fill="x", padx=8, pady=(4, 0))
+        ttk.Label(drow, text="区間の表示：").pack(side="left")
+        for val, label in (("time", "時間"), ("frame", "フレーム番号"), ("both", "両方")):
+            ttk.Radiobutton(drow, text=label, value=val, variable=self.vars["cut_disp"],
+                            command=self.on_cut_disp).pack(side="left", padx=(0, 8))
+
         lrow = ttk.Frame(f); lrow.pack(fill="x", padx=8, pady=4)
         self.seglist = ttk.Treeview(lrow, columns=("seg",), height=4, selectmode="extended")
         self.seglist.heading("#0", text="24p化")
@@ -3948,6 +3956,16 @@ class App:
             self.update_pos_labels()
             self.load_frame()
 
+    def on_cut_disp(self):
+        """区間の表示（時間／フレーム番号／両方）を切り替えた"""
+        sel = self.seglist.selection()
+        self.refresh_cut_list()
+        try:
+            self.seglist.selection_set([i for i in sel if self.seglist.exists(i)])
+        except tk.TclError:
+            pass
+        self.schedule_save()
+
     def refresh_cut_list(self):
         self.refresh_marks()
         if self.cur_path:
@@ -3959,10 +3977,20 @@ class App:
             self.cut_total.config(text="")
             return
         fps = info["fps"]
+        mode = self.vars["cut_disp"].get()
+
+        def pos_text(n):
+            if mode == "time":
+                return fmt_tc(n, fps)
+            if mode == "frame":
+                return f"#{n}"
+            return f"{fmt_tc(n, fps)} (#{n})"
+
         for i, (s, e, f) in enumerate(lst):
+            length = f"{e - s + 1} コマ" if mode == "frame" else fmt_dur((e - s + 1) / fps)
             self.seglist.insert(
                 "", "end", iid=str(i), text="☑" if f else "☐",
-                values=(f"{i + 1}: {fmt_tc(s, fps)} 〜 {fmt_tc(e, fps)}   （{fmt_dur((e - s + 1) / fps)}）",))
+                values=(f"{i + 1}: {pos_text(s)} 〜 {pos_text(e)}   （{length}）",))
         n = kept_frames(lst, info["nframes"])
         self.cut_total.config(
             text=f"残す合計 {fmt_dur(n / fps)} ／ 全体 {fmt_dur(info['nframes'] / fps)}" if lst
