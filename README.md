@@ -59,10 +59,11 @@ ffmpeg は .avs を開くときに `avisynth.dll` を読み込みます。Window
 
 | 欄 | 例 | 同じフォルダの avisynth.dll | 使われる AviSynth |
 |---|---|---|---|
-| 通常用ffmpeg（Neo） | `C:\ffmpeg\ffmpegNEW.exe` | **置かない** | インストール済みの Neo |
-| 24p用ffmpeg（3.7.5） | `C:\ffmpeg\NEW\ffmpeg.exe` | AviSynth+ 3.7.5 のもの | 3.7.5 |
+| 通常用ffmpeg（Neo） | `C:\ffmpeg\neo\ffmpeg.exe` | **置かない** | インストール済みの Neo |
+| 24p用ffmpeg（3.7.5） | `C:\ffmpeg\avs375\ffmpeg.exe` | AviSynth+ 3.7.5 のもの | 3.7.5 |
 
-- ffmpeg.exe の名前は変えても大丈夫です（例：`ffmpegNEW.exe`）。欄で選んだファイルがそのまま使われます。
+- フォルダ名は例です。`neo` は通常用（AviSynth Neo）、`avs375` は 24p 用（AviSynth+ 3.7.5）の意味で付けています。2つが別のフォルダになっていれば、名前は自由です。
+- ffmpeg.exe の名前は変えても大丈夫です（例：`ffmpeg_neo.exe`）。欄で選んだファイルがそのまま使われます。
 - 通常用のフォルダに 3.7.5 の avisynth.dll があると、Neo 用の avs が 3.7.5 で開かれて「CUDA」のエラーになります（[困ったとき](#9-困ったとき)参照）。
 
 ### 2-3. 24p 化用のプラグインフォルダを作る

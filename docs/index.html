@@ -328,11 +328,12 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
 <p>ffmpeg は .avs を開くときに <code>avisynth.dll</code> を読み込みます。Windows は <strong>ffmpeg.exe と同じフォルダの avisynth.dll を優先</strong>し、なければパソコンにインストールされた AviSynth（Neo）を使います。この仕組みで、2つの ffmpeg が使う AviSynth を分けます。</p>
 <div class="table-wrap"><table>
 <tr><th>欄</th><th>例</th><th>同じフォルダの avisynth.dll</th><th>使われる AviSynth</th></tr>
-<tr><td>通常用ffmpeg（Neo）</td><td><code>C:\ffmpeg\ffmpegNEW.exe</code></td><td><strong>置かない</strong></td><td>インストール済みの Neo</td></tr>
-<tr><td>24p用ffmpeg（3.7.5）</td><td><code>C:\ffmpeg\NEW\ffmpeg.exe</code></td><td>AviSynth+ 3.7.5 のもの</td><td>3.7.5</td></tr>
+<tr><td>通常用ffmpeg（Neo）</td><td><code>C:\ffmpeg\neo\ffmpeg.exe</code></td><td><strong>置かない</strong></td><td>インストール済みの Neo</td></tr>
+<tr><td>24p用ffmpeg（3.7.5）</td><td><code>C:\ffmpeg\avs375\ffmpeg.exe</code></td><td>AviSynth+ 3.7.5 のもの</td><td>3.7.5</td></tr>
 </table></div>
 <ul>
-  <li>ffmpeg.exe の名前は変えても大丈夫です（例：<code>ffmpegNEW.exe</code>）。欄で選んだファイルがそのまま使われます。</li>
+  <li>フォルダ名は例です。<code>neo</code> は通常用（AviSynth Neo）、<code>avs375</code> は 24p 用（AviSynth+ 3.7.5）の意味で付けています。2つが別のフォルダになっていれば、名前は自由です。</li>
+  <li>ffmpeg.exe の名前は変えても大丈夫です（例：<code>ffmpeg_neo.exe</code>）。欄で選んだファイルがそのまま使われます。</li>
 </ul>
 <div class="warn"><b>注意</b>通常用 ffmpeg のフォルダに 3.7.5 の avisynth.dll があると、Neo 用の avs が 3.7.5 で開かれて「CUDA」のエラーになります。</div>
 

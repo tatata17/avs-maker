@@ -2,6 +2,13 @@
   "note": "更新履歴。新しい版を出すたびに、いちばん上に追加する（version.json と同じ版番号・内容）",
   "releases": [
     {
+      "version": "1.4.7",
+      "date": "2026-11-06",
+      "notes": [
+        "ffmpeg の場所の初期値を、分かりやすいフォルダ名（C:\\ffmpeg\\neo\\ffmpeg.exe と C:\\ffmpeg\\avs375\\ffmpeg.exe）に変更。すでに場所を設定している人は、そのまま変わりません"
+      ]
+    },
+    {
       "version": "1.4.6",
       "date": "2026-10-31",
       "notes": [

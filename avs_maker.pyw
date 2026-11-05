@@ -52,7 +52,7 @@ except Exception:
 HAS_PREVIEW = HAS_IMG and HAS_TKIMG
 
 APP_TITLE = "AVS かんたん作成ツール"
-APP_VERSION = "1.4.6"
+APP_VERSION = "1.4.7"
 
 # 更新の確認先（GitHub）。version.json に最新の版番号と変更内容、avs_maker.pyw に本体を置く
 UPDATE_REPO = "tatata17/avs-maker"
@@ -95,8 +95,8 @@ DEFAULTS = {
     "cut_disp": "both",   # 残す区間の表示（time = 時間 / frame = フレーム番号 / both = 両方）
     "show_enc": False,    # ③④（保存先・エンコード）の欄を開いておくか（ffmpeg が見つからないときは自動で開く）
     # ffmpegの場所の初期値（初回起動時だけ使う。変えると、次からは変えた場所が使われる）
-    "ffmpeg": r"C:\ffmpeg\ffmpegNEW.exe",     # 通常用（AviSynth Neo を読む側）
-    "ffmpeg24": r"C:\ffmpeg\NEW\ffmpeg.exe",  # 24p用（AviSynth+ 3.7.5 の avisynth.dll と同じフォルダ）
+    "ffmpeg": r"C:\ffmpeg\neo\ffmpeg.exe",     # 通常用（AviSynth Neo を読む側）
+    "ffmpeg24": r"C:\ffmpeg\avs375\ffmpeg.exe",  # 24p用（AviSynth+ 3.7.5 の avisynth.dll と同じフォルダ）
 }
 
 # 動画ごとに別々に持つ設定（それ以外の ffmpeg の場所・保存先・画質などは全部の動画で共通）
@@ -1269,14 +1269,14 @@ def copy_image_to_clipboard(img):
 # ---------------------------------------------------------------- ffmpeg まわり
 def find_tool(name, custom=""):
     """ffmpeg / ffprobe を探す。指定された場所 → 同じフォルダ → PATH の順。
-    ffmpeg は、選ばれたファイルを名前にかかわらずそのまま使う（ffmpegNEW.exe のように名前を変えていても可）"""
+    ffmpeg は、選ばれたファイルを名前にかかわらずそのまま使う（ffmpeg_neo.exe のように名前を変えていても可）"""
     if custom and os.path.isfile(custom):
         stem, ext = os.path.splitext(os.path.basename(custom))
         if name == "ffmpeg" or stem.lower() == name:
             return custom
         d = os.path.dirname(custom)
         cands = []
-        if stem.lower().startswith("ffmpeg"):          # ffmpegNEW.exe → ffprobeNEW.exe も探す
+        if stem.lower().startswith("ffmpeg"):          # ffmpeg_neo.exe → ffprobe_neo.exe も探す
             cands.append(name + stem[len("ffmpeg"):] + ext)
         cands += [name + ".exe", name]
         for cand in cands:
