@@ -31,17 +31,17 @@ VHS などのアナログ取り込み動画から AviSynth のスクリプト（
 
 ## 1. 必要なもの
 
-| もの | 用途 | 備考 |
+| もの | 用途 | 入手先・備考 |
 |---|---|---|
-| Python 3（Windows 版） | ツールを動かす | `.pyw` をダブルクリックで起動できるようにしておく |
+| Python 3（Windows 版） | ツールを動かす | [python.org](https://www.python.org/downloads/windows/)。インストーラーで **「Add python.exe to PATH」** と **「py launcher」** にチェック（`.pyw` をダブルクリックで起動できるようになる） |
 | Pillow・numpy | プレビュー・比較画像・カット編集 | `pip install pillow numpy` |
 | tkinterdnd2 | ドラッグ＆ドロップ | `pip install tkinterdnd2`（なくても「ファイルを追加…」で使える） |
-| AviSynth Neo | 通常の処理（KFMDeint・CUDA） | パソコンにインストールしておく |
-| AviSynth+ 3.7.5 の `avisynth.dll` | 24p 化（QTGMC＋SRestore） | インストールせず、24p 用 ffmpeg と同じフォルダに置く |
-| ffmpeg（2つ） | プレビュー・エンコード | 通常用と 24p 用。avisynth に対応したビルド（gyan.dev の full build など） |
-| NVIDIA の GPU とドライバ | HEVC（NVENC）エンコード | 新しい ffmpeg はドライバ 610 以降が必要 |
+| AviSynth Neo | 通常の処理（KFMDeint・CUDA） | [nekopanda/AviSynthPlus](https://github.com/nekopanda/AviSynthPlus/releases) をインストール。KFMDeint は [AviSynthCUDAFilters](https://github.com/nekopanda/AviSynthCUDAFilters/releases) |
+| AviSynth+ 3.7.5 の `avisynth.dll` | 24p 化（QTGMC＋SRestore） | [AviSynth+ v3.7.5](https://github.com/AviSynth/AviSynthPlus/releases/tag/v3.7.5) の filesonly 版から取り出す。**インストールせず**、24p 用 ffmpeg と同じフォルダに置く |
+| ffmpeg（2つ） | プレビュー・エンコード | [gyan.dev](https://www.gyan.dev/ffmpeg/builds/) の **full** 版（avisynth に対応）。zip の `bin` の `ffmpeg.exe`・`ffprobe.exe` を使う。通常用と 24p 用の2組 |
+| NVIDIA の GPU とドライバ | HEVC（NVENC）エンコード | [NVIDIA のドライバ](https://www.nvidia.com/ja-jp/drivers/)。新しい ffmpeg は 610 以降が必要 |
 
-Pillow などが入っていなくてもツールは起動しますが、その機能だけ使えなくなります。
+Pillow などが入っていなくてもツールは起動しますが、その機能だけ使えなくなります。`pip` のコマンドは、スタートメニューの「コマンドプロンプト」に入力します。
 
 ---
 
@@ -71,7 +71,7 @@ ffmpeg は .avs を開くときに `avisynth.dll` を読み込みます。Window
 初期値は `C:\avs_srestore` です。次のものを入れておきます。
 
 - スクリプト（.avsi）：`QTGMC.avsi`、`Srestore.avsi`、`Zs_RF_Shared.avsi`
-  （realfinder/AVS-Stuff の `avs 2.5 and up` / `avs 2.6 and up` フォルダにあります。`Zs_RF_Shared.avsi` は `AvsPlusVersionNumber` などを含むので必須）
+  （[realfinder/AVS-Stuff](https://github.com/realfinder/AVS-Stuff) の `avs 2.5 and up` / `avs 2.6 and up` フォルダにあります。`Zs_RF_Shared.avsi` は `AvsPlusVersionNumber` などを含むので必須）
 - プラグイン（64bit の .dll）：`masktools2`、`RgTools`、`mvtools2`、`nnedi3`、`TIVTC`、`Average`、`grunt`
 - CCD を 24p 化と一緒に使うとき：`VDubFilter.dll`（AviSynth+ 3.7.5 の filesonly 版に入っているもの）
 - mp4 / mkv など AVI 以外を読むとき：LSMASHSource
