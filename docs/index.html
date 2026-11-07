@@ -4,325 +4,263 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>AVS かんたん作成ツール 使い方</title>
-<meta name="description" content="VHS の取り込み動画から avs を作り、ffmpeg（HEVC / NVENC）でエンコードする avs_maker.pyw の使い方">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<meta name="description" content="VHS の取り込み動画から avs を作り、ffmpeg(HEVC / NVENC)でエンコードする avs_maker.pyw の使い方">
+<script>try{var t=localStorage.getItem("theme");if(t)document.documentElement.setAttribute("data-theme",t);}catch(e){}</script>
 <style>
-:root {
-  --bg: #f7f6f2;
-  --surface: #ffffff;
-  --surface-2: #efede6;
-  --text: #22211e;
-  --muted: #6b6860;
-  --line: #dedbd2;
-  --accent: #2f6f6a;
-  --accent-soft: #e2efed;
-  --warn: #9a4b16;
-  --warn-soft: #f7ebe0;
-  --code-bg: #f1efe8;
-  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.04);
+/* ===== 共通デザイン(3つの使い方ページで同じものを使います) ===== */
+:root{
+  --bg:#f6f7f9; --panel:#ffffff; --ink:#1d2430; --muted:#5d6877; --line:#dde2ea;
+  --accent:#0f7b8a; --accent-ink:#ffffff; --accent-soft:#e3f3f5; --warn:#fff4dc; --warn-line:#ecd29a;
+  --code:#eef1f5; --warn-ink:#8a4a10; --shadow:0 1px 2px rgba(20,30,50,.06),0 6px 20px rgba(20,30,50,.05);
 }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #171816;
-    --surface: #1f201e;
-    --surface-2: #262825;
-    --text: #e8e6e0;
-    --muted: #a19e95;
-    --line: #34362f;
-    --accent: #7cc2b9;
-    --accent-soft: #1f3330;
-    --warn: #e9a46f;
-    --warn-soft: #33261c;
-    --code-bg: #262825;
-    --shadow: none;
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f141b; --panel:#171e28; --ink:#e6ebf2; --muted:#9aa6b6; --line:#2a3443;
+    --accent:#4cc3d3; --accent-ink:#06222a; --accent-soft:#12303a; --warn:#2c2616; --warn-line:#6d5a22;
+    --code:#202a37; --warn-ink:#e9a46f; --shadow:none;
   }
 }
-:root[data-theme="dark"] {
-  --bg: #171816; --surface: #1f201e; --surface-2: #262825; --text: #e8e6e0; --muted: #a19e95;
-  --line: #34362f; --accent: #7cc2b9; --accent-soft: #1f3330; --warn: #e9a46f; --warn-soft: #33261c;
-  --code-bg: #262825; --shadow: none;
+:root[data-theme="dark"]{
+  --bg:#0f141b; --panel:#171e28; --ink:#e6ebf2; --muted:#9aa6b6; --line:#2a3443;
+  --accent:#4cc3d3; --accent-ink:#06222a; --accent-soft:#12303a; --warn:#2c2616; --warn-line:#6d5a22;
+  --code:#202a37; --warn-ink:#e9a46f; --shadow:none;
 }
-* { box-sizing: border-box; }
-html { scroll-behavior: smooth; scroll-padding-top: 72px; }
-body {
-  margin: 0; background: var(--bg); color: var(--text);
-  font-family: "Noto Sans JP", "Yu Gothic UI", "Hiragino Sans", "Meiryo", sans-serif;
-  font-size: 15.5px; line-height: 1.85; letter-spacing: .01em;
-  -webkit-font-smoothing: antialiased;
-}
-a { color: var(--accent); text-underline-offset: 3px; }
-code, kbd {
-  font-family: "JetBrains Mono", Consolas, monospace; font-size: .88em;
-  background: var(--code-bg); border: 1px solid var(--line); border-radius: 5px; padding: .08em .38em;
-  overflow-wrap: anywhere;
-}
-kbd { border-bottom-width: 2px; }
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:72px}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:16px/1.85 "Yu Gothic UI","Hiragino Sans","Noto Sans JP","Meiryo",system-ui,sans-serif;-webkit-text-size-adjust:100%}
+a{color:var(--accent);text-underline-offset:3px}
+p{margin:10px 0}
+ul,ol{padding-left:1.4em;margin:8px 0}
+li{margin:4px 0}
+code,kbd{font:.9em/1.4 "Cascadia Mono",Consolas,monospace;background:var(--code);border:1px solid var(--line);padding:.08em .4em;border-radius:5px;overflow-wrap:anywhere}
+kbd{border-bottom-width:2px}
+pre{background:var(--code);border:1px solid var(--line);padding:14px 16px;border-radius:10px;overflow:auto;line-height:1.6;font:14px/1.6 "Cascadia Mono",Consolas,monospace}
+pre code{background:none;border:none;padding:0}
+a:focus-visible,button:focus-visible,summary:focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 55%,transparent);outline-offset:2px;border-radius:6px}
 
 /* ヘッダー */
-.top {
-  position: sticky; top: 0; z-index: 20;
-  display: flex; align-items: center; gap: 12px;
-  padding: 10px 20px; background: color-mix(in srgb, var(--bg) 88%, transparent);
-  backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
-}
-.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 15px; }
-.brand .mark {
-  width: 28px; height: 28px; border-radius: 7px; background: var(--accent); color: var(--bg);
-  display: grid; place-items: center; font-family: "JetBrains Mono", monospace; font-size: 12px; font-weight: 500;
-}
-.top .ver { color: var(--muted); font-size: 13px; font-weight: 400; }
-.top .spacer { flex: 1; }
-.top a.gh { font-size: 13px; text-decoration: none; color: var(--muted); line-height: 1.5; }
-.top a.gh:hover { color: var(--accent); }
-.menu-btn {
-  display: none; border: 1px solid var(--line); background: var(--surface); color: var(--text);
-  border-radius: 8px; padding: 5px 10px; font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap;
-}
-.theme-btn {
-  border: 1px solid var(--line); background: var(--surface); color: var(--muted);
-  border-radius: 8px; padding: 5px 10px; font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap;
-}
-.theme-btn:hover, .menu-btn:hover { color: var(--accent); border-color: var(--accent); }
+header.top{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--panel) 92%,transparent);
+  backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.top-in{max-width:1120px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:12px}
+.logo{display:inline-grid;place-items:center;width:34px;height:34px;border-radius:9px;background:var(--accent);color:var(--accent-ink);font:700 13px/1 "Cascadia Mono",Consolas,monospace;flex:none}
+.brand{font-weight:700;letter-spacing:.02em;white-space:nowrap}
+.brand small{font-weight:400;color:var(--muted);margin-left:8px}
+.spacer{flex:1}
+.btn{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);
+  padding:8px 16px;border-radius:999px;font-weight:700;text-decoration:none;cursor:pointer;font-size:15px;line-height:1.4}
+.btn:hover{filter:brightness(1.08)}
+.btn.ghost{background:transparent;color:var(--accent)}
+.icon-btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;height:38px;padding:0 14px;cursor:pointer;font:inherit;font-size:14px;white-space:nowrap}
+.icon-btn:hover{border-color:var(--accent);color:var(--accent)}
+.toc-btn{display:none;border:1px solid var(--accent);background:transparent;color:var(--accent);border-radius:10px;height:38px;padding:0 14px;font:inherit;font-weight:700;font-size:14px;cursor:pointer;white-space:nowrap}
 
-/* レイアウト */
-.layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); max-width: 1180px; margin: 0 auto; }
-nav.toc {
-  position: sticky; top: 53px; align-self: start; height: calc(100vh - 53px); overflow-y: auto;
-  padding: 24px 12px 40px 20px; border-right: 1px solid var(--line);
+/* レイアウトと目次 */
+.layout{max-width:1120px;margin:0 auto;padding:0 16px;display:grid;grid-template-columns:220px minmax(0,1fr);gap:40px}
+nav.toc{position:sticky;top:72px;align-self:start;max-height:calc(100vh - 90px);overflow:auto;padding:28px 0}
+nav.toc ol{list-style:none;margin:0;padding:0;border-left:2px solid var(--line)}
+nav.toc li{margin:0}
+nav.toc a{display:block;padding:5px 12px;margin-left:-2px;border-left:2px solid transparent;color:var(--muted);text-decoration:none;font-size:14.5px;line-height:1.5}
+nav.toc a:hover{color:var(--ink)}
+nav.toc a.on{color:var(--accent);border-left-color:var(--accent);font-weight:700}
+nav.toc .tn{display:inline-block;min-width:1.9em;color:var(--muted);font:12.5px/1 "Cascadia Mono",Consolas,monospace}
+main{padding:28px 0 80px;min-width:0}
+
+/* ヒーロー(いちばん上の紹介) */
+.hero{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:28px 28px 24px;box-shadow:var(--shadow);margin-top:0}
+.hero h1{margin:0 0 6px;font-size:clamp(26px,4.5vw,36px);line-height:1.3}
+.hero>p:not(.note){margin:.4em 0;color:var(--muted)}
+.feat{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin:18px 0 0;padding:0;list-style:none}
+.feat li{background:var(--accent-soft);border-radius:12px;padding:10px 14px;font-size:15px;line-height:1.6;margin:0}
+.hero .row{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:18px;align-items:center}
+.hero .note{margin-bottom:0}
+.ver{font-size:14px;color:var(--muted)}
+.quick{background:var(--accent-soft);border-radius:12px;padding:12px 18px;margin:16px 0 0}
+.quick>b{display:block;font-size:17px}
+.quick ol{margin:4px 0 0}
+
+/* 章 */
+section{margin-top:44px}
+h2{font-size:24px;margin:0 0 14px;line-height:1.4;padding-bottom:8px;border-bottom:1px solid var(--line)}
+h2 .n{display:inline-block;min-width:1.9em;height:1.9em;line-height:1.9em;text-align:center;border-radius:50%;background:var(--accent);color:var(--accent-ink);font-size:.7em;margin-right:10px;vertical-align:.12em}
+h3{font-size:18px;margin:26px 0 8px}
+
+/* 注意書き: note=ヒント・補足 / warn=注意 */
+.note,.warn{border-radius:12px;padding:12px 16px;margin:16px 0;font-size:15px;border:1px solid var(--line)}
+.note{background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 35%,var(--line))}
+.warn{background:var(--warn);border-color:var(--warn-line)}
+.lb{display:block;margin-bottom:2px}
+.note>.lb{color:var(--accent)}
+.warn>.lb{color:var(--warn-ink)}
+.muted{color:var(--muted)}
+p.muted{font-size:14px}
+
+/* 表(スマホでは1行=1枚のカードになります) */
+.table-wrap{overflow-x:auto;margin:12px 0;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+table{width:100%;border-collapse:collapse;font-size:15px}
+th,td{padding:10px 14px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+tr:last-child td{border-bottom:none}
+th{background:var(--accent-soft);white-space:nowrap}
+td:first-child{min-width:8.5em}
+
+/* 手順 */
+.steps{counter-reset:s;list-style:none;padding:0;margin:12px 0}
+.steps>li{counter-increment:s;position:relative;padding:4px 0 10px 44px;margin:0}
+.steps>li::before{content:counter(s);position:absolute;left:0;top:3px;width:30px;height:30px;line-height:30px;text-align:center;border-radius:50%;background:var(--accent-soft);color:var(--accent);font-weight:700}
+.steps>li>strong:first-child{display:block}
+
+/* 小さなカード */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:14px 0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 16px;box-shadow:var(--shadow)}
+.card h4{margin:0 0 4px;font-size:15px;color:var(--accent)}
+.card p{margin:0;font-size:14.5px;line-height:1.7}
+
+/* 画面のイメージ図(説明用の図) */
+.mock{margin:18px 0 6px;background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--shadow);font-size:13px;line-height:1.5}
+.mock .bar{background:var(--code);padding:6px 12px;border-bottom:1px solid var(--line);color:var(--muted)}
+.mock .muted{color:var(--muted)}
+.mock .b{display:inline-block;border:1px solid var(--line);border-radius:5px;padding:0 9px;background:var(--panel);margin:2px 2px 2px 0;white-space:nowrap}
+.mock .b.go{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:700}
+.mock fieldset{border:1px solid var(--line);border-radius:8px;margin:0;padding:4px 10px 8px;min-width:0}
+.mock legend{padding:0 6px;font-weight:700;color:var(--accent)}
+.mock .list{border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.mock .list div{border-bottom:1px solid var(--line)}
+.mock .list div:last-child{border-bottom:none}
+.mock .list div:first-child{background:var(--code);font-weight:700}
+.mock .list div.sel{background:var(--accent-soft)}
+.mock .tabs span{display:inline-block;padding:2px 10px;border:1px solid var(--line);border-bottom:none;border-radius:6px 6px 0 0;margin-right:4px;color:var(--muted)}
+.mock .tabs span.on{background:var(--accent-soft);color:var(--ink);font-weight:700}
+.mock-cap{color:var(--muted);font-size:13.5px;margin:4px 0 14px}
+
+/* 更新履歴(日付ごと。新しい日だけ開いておき、古い日は折りたたみ) */
+.day,.fold{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 18px;margin:12px 0;box-shadow:var(--shadow)}
+.day>summary,.fold>summary{cursor:pointer;list-style:none}
+.day>summary::-webkit-details-marker,.fold>summary::-webkit-details-marker{display:none}
+.day>summary::before,.fold>summary::before{content:"▸";display:inline-block;width:1.2em;color:var(--muted)}
+.day[open]>summary::before,.fold[open]>summary::before{content:"▾"}
+.fold>summary{font-weight:700}
+.day .d{font-weight:700;font-size:17px}
+.day .vr{color:var(--muted);font-size:13.5px;margin-left:8px}
+.day .new{font-size:12px;color:var(--accent-ink);background:var(--accent);border-radius:999px;padding:1px 9px;margin-left:8px;font-weight:700}
+.day ul{margin:8px 0 2px}
+.day .tag{font-size:12px;color:var(--accent);background:var(--accent-soft);border-radius:999px;padding:0 8px;margin-right:6px;white-space:nowrap}
+
+footer{border-top:1px solid var(--line);margin-top:60px;padding:22px 0;color:var(--muted);font-size:14px}
+
+@media (max-width:820px){
+  .logo{display:none}
+  .layout{grid-template-columns:1fr;gap:0}
+  .toc-btn{display:inline-flex;align-items:center}
+  .top-in{gap:8px;padding:8px 12px}
+  .btn.ghost{padding:6px 12px;font-size:14px}
+  nav.toc{display:none;position:fixed;top:58px;left:10px;right:10px;max-height:72vh;overflow:auto;padding:10px;z-index:30;
+    background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.25)}
+  nav.toc.open{display:block}
+  nav.toc ol{border:none}
+  nav.toc a{border:none;border-radius:8px;margin:0;padding:9px 12px;font-size:16px}
+  nav.toc a.on{background:var(--accent-soft)}
+  .brand{font-size:15px;overflow:hidden;text-overflow:ellipsis;min-width:0}
+  .brand small{display:none}
+  .icon-btn{padding:0 10px;font-size:13px}
+  .hero{padding:20px 18px}
 }
-nav.toc .label { font-size: 12px; color: var(--muted); letter-spacing: .08em; margin: 0 0 8px 10px; }
-nav.toc a {
-  display: flex; gap: 2px; padding: 5px 10px; border-radius: 7px; color: var(--muted);
-  text-decoration: none; font-size: 14px; line-height: 1.5;
+/* スマホでは、表を「1行=1枚のカード」に並べ替える(横に狭くならないように) */
+@media (max-width:640px){
+  .table-wrap{border:none;background:none;overflow:visible}
+  .table-wrap table,.table-wrap tbody,.table-wrap tr,.table-wrap td{display:block;width:100%}
+  .table-wrap tr:first-child{display:none}
+  .table-wrap tr{background:var(--panel);border:1px solid var(--line);border-radius:12px;margin:0 0 10px;padding:8px 12px;box-shadow:var(--shadow)}
+  .table-wrap td{border:none;padding:3px 0}
+  .table-wrap td:first-child{font-weight:700;padding-top:2px}
+  .table-wrap td[data-label]:not(:first-child)::before{content:attr(data-label);display:block;font-size:12px;color:var(--muted);letter-spacing:.04em}
 }
-nav.toc a:hover { color: var(--text); background: var(--surface-2); }
-nav.toc a.active { color: var(--accent); background: var(--accent-soft); font-weight: 500; }
-nav.toc a .n { flex: none; display: inline-block; width: 1.8em; font-family: "JetBrains Mono", monospace; font-size: 12px; opacity: .75; }
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
 
-main { padding: 32px 40px 80px; min-width: 0; }
-.hero { padding: 8px 0 24px; border-bottom: 1px solid var(--line); margin-bottom: 8px; }
-.hero h1 { font-size: 30px; line-height: 1.35; margin: 0 0 10px; letter-spacing: .02em; }
-.hero p { color: var(--muted); margin: 0; max-width: 46em; }
-.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
-.chip {
-  font-size: 13px; padding: 3px 10px; border-radius: 999px; background: var(--surface);
-  border: 1px solid var(--line); color: var(--muted);
-}
-
-section { padding-top: 28px; }
-h2 {
-  font-size: 22px; margin: 18px 0 12px; display: flex; align-items: baseline; gap: 10px;
-  padding-bottom: 8px; border-bottom: 1px solid var(--line);
-}
-h2 .n { font-family: "JetBrains Mono", monospace; font-size: 14px; color: var(--accent); font-weight: 500; }
-h3 { font-size: 17px; margin: 26px 0 8px; }
-p { margin: 10px 0; }
-ul, ol { padding-left: 1.4em; margin: 8px 0; }
-li { margin: 4px 0; }
-
-.table-wrap { overflow-x: auto; margin: 12px 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
-table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
-th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
-th { background: var(--surface-2); font-weight: 500; white-space: nowrap; }
-tr:last-child td { border-bottom: none; }
-td:first-child { white-space: nowrap; }
-td.wrap { white-space: normal; }
-td code { overflow-wrap: normal; word-break: keep-all; }
-
-.note, .warn {
-  border-radius: 10px; padding: 12px 16px; margin: 14px 0; font-size: 14.5px;
-  border: 1px solid var(--line);
-}
-.note { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 30%, var(--line)); }
-.warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 35%, var(--line)); }
-.note b, .warn b { display: block; margin-bottom: 2px; }
-.warn b { color: var(--warn); }
-.note b { color: var(--accent); }
-
-.steps { counter-reset: step; list-style: none; padding: 0; margin: 14px 0; }
-.steps > li {
-  counter-increment: step; position: relative; padding: 12px 16px 12px 52px; margin: 8px 0;
-  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow);
-}
-.steps > li::before {
-  content: counter(step); position: absolute; left: 14px; top: 12px;
-  width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--bg);
-  display: grid; place-items: center; font-size: 13px; font-weight: 700; line-height: 1;
-}
-.steps > li strong { display: block; }
-
-pre {
-  background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px;
-  padding: 12px 14px; overflow-x: auto; font-size: 13.5px; line-height: 1.6;
-}
-pre code { background: none; border: none; padding: 0; }
-
-.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 14px 0; }
-.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; box-shadow: var(--shadow); }
-.card h4 { margin: 0 0 4px; font-size: 15px; }
-.release { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; margin: 10px 0; box-shadow: var(--shadow); }
-.release h4 { margin: 0 0 4px; font-size: 16px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
-.release h4 .date { font-size: 13px; color: var(--muted); font-weight: 400; }
-.release h4 .new { font-size: 12px; color: var(--bg); background: var(--accent); border-radius: 999px; padding: 1px 8px; font-weight: 500; }
-.release ul { margin: 4px 0 0; }
-.muted { color: var(--muted); }
-.card p { margin: 0; color: var(--muted); font-size: 14px; }
-
-/* ダウンロードボタン */
-.dl-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 18px; }
-.btn {
-  display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--accent); background: var(--accent);
-  color: var(--bg); padding: 8px 18px; border-radius: 999px; font-weight: 700; text-decoration: none; font-size: 15px; line-height: 1.4;
-}
-.btn:hover { filter: brightness(1.08); }
-.dl-row .sub { color: var(--muted); font-size: 13.5px; }
-a:focus-visible, button:focus-visible, summary:focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; border-radius: 6px;
-}
-
-/* 画面のイメージ図（実際の画面を単純化した説明用の図） */
-.mock { margin: 16px 0 6px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); font-size: 12.5px; line-height: 1.5; }
-.mock .bar { background: var(--surface-2); padding: 6px 12px; border-bottom: 1px solid var(--line); color: var(--muted); }
-.mock .mbody { display: grid; grid-template-columns: 1.3fr 1fr; gap: 10px; padding: 10px; }
-.mock .mcol { display: grid; gap: 8px; align-content: start; min-width: 0; }
-.mock fieldset { border: 1px solid var(--line); border-radius: 8px; margin: 0; padding: 4px 10px 8px; min-width: 0; }
-.mock legend { padding: 0 6px; font-weight: 700; color: var(--accent); }
-.mock .b { display: inline-block; border: 1px solid var(--line); border-radius: 5px; padding: 0 8px; background: var(--surface); margin: 2px 2px 2px 0; white-space: nowrap; }
-.mock .b.go { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 700; }
-.mock .list { border: 1px solid var(--line); border-radius: 6px; overflow: hidden; margin: 4px 0; }
-.mock .list div { display: grid; grid-template-columns: 2fr 1.2fr 1.4fr 1fr; gap: 6px; padding: 2px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; overflow: hidden; }
-.mock .list div:last-child { border-bottom: none; }
-.mock .list div:first-child { background: var(--surface-2); font-weight: 700; }
-.mock .list div.sel { background: var(--accent-soft); }
-.mock .list span { overflow: hidden; text-overflow: ellipsis; }
-.mock .fold legend { color: var(--muted); }
-.mock .pv { aspect-ratio: 4 / 3; border-radius: 6px; background: linear-gradient(135deg, #3d4a5c, #1e252f); color: #cfd6df;
-  display: grid; place-items: center; text-align: center; padding: 8px; font-size: 12px; }
-.mock .tabs span { display: inline-block; padding: 1px 9px; border: 1px solid var(--line); border-bottom: none; border-radius: 6px 6px 0 0; margin-right: 3px; color: var(--muted); }
-.mock .tabs span.on { background: var(--accent-soft); color: var(--text); font-weight: 700; }
-.mock .tabbody { border: 1px solid var(--line); border-radius: 0 6px 6px 6px; padding: 6px 8px; }
-.mock .foot { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; padding: 8px 10px; border-top: 1px solid var(--line); background: var(--surface-2); }
-.mock .foot .sp { flex: 1; }
-.mock .muted { color: var(--muted); }
-.mock-cap { color: var(--muted); font-size: 13px; margin: 4px 0 14px; }
-.legend-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; margin: 10px 0; }
-.legend-grid div { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; font-size: 14px; line-height: 1.7; }
-.legend-grid b { color: var(--accent); }
-
-/* 更新履歴の折りたたみ */
-details.older { margin: 12px 0; }
-details.older > summary { cursor: pointer; color: var(--accent); font-weight: 500; padding: 6px 0; }
-
-footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
-
-@media (max-width: 860px) {
-  .layout { grid-template-columns: 1fr; }
-  nav.toc {
-    display: none; position: fixed; top: 60px; left: 10px; right: 10px; height: auto; max-height: 72vh; z-index: 30;
-    padding: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
-    box-shadow: 0 12px 40px rgba(0,0,0,.25);
-  }
-  nav.toc.open { display: block; }
-  nav.toc .label { display: none; }
-  nav.toc a { padding: 9px 12px; font-size: 16px; }
-  .menu-btn { display: inline-block; color: var(--accent); border-color: var(--accent); font-weight: 700; }
-  main { padding: 20px 16px 64px; }
-  .hero h1 { font-size: 24px; }
-  .top a.gh { border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; white-space: nowrap; }
-  .brand .mark { display: none; }
-  .chip { font-size: 12px; padding: 2px 9px; }
-  .top { padding: 10px 12px; gap: 8px; }
-  .brand { min-width: 0; font-size: 14px; }
-  .brand > span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .top .ver { display: none; }
-}
-/* スマホでは、表を「1行＝1枚のカード」に並べ替える（横に狭くならないように） */
-@media (max-width: 640px) {
-  .mock .mbody { grid-template-columns: 1fr; }
-  .mock .list div { grid-template-columns: 2fr 1.2fr 1.4fr; }
-  .mock .list span:nth-child(4) { display: none; }
-  .table-wrap { border: none; background: none; overflow: visible; }
-  .table-wrap table, .table-wrap tbody, .table-wrap tr, .table-wrap td { display: block; width: 100%; }
-  .table-wrap tr:first-child { display: none; }               /* 見出しの行 */
-  .table-wrap tr {
-    background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
-    margin: 0 0 10px; padding: 8px 12px; box-shadow: var(--shadow);
-  }
-  .table-wrap td { border: none; padding: 3px 0; white-space: normal; }
-  .table-wrap td:first-child { font-weight: 700; padding-top: 2px; }
-  .table-wrap td[data-label]:not(:first-child)::before {
-    content: attr(data-label); display: block; font-size: 12px; color: var(--muted); letter-spacing: .04em;
-  }
-  td code { white-space: normal; overflow-wrap: anywhere; word-break: normal; }
+/* ===== このページだけの部品 ===== */
+.mock .mbody{display:grid;grid-template-columns:1.3fr 1fr;gap:10px;padding:10px}
+.mock .mcol{display:grid;gap:8px;align-content:start;min-width:0}
+.mock .list{margin:4px 0}
+.mock .list div{display:grid;grid-template-columns:2fr 1.2fr 1.4fr 1fr;gap:6px;padding:2px 8px;white-space:nowrap;overflow:hidden}
+.mock .list span{overflow:hidden;text-overflow:ellipsis}
+.mock .fold legend{color:var(--muted)}
+.mock .pv{aspect-ratio:4/3;border-radius:6px;background:linear-gradient(135deg,#3d4a5c,#1e252f);color:#cfd6df;display:grid;place-items:center;text-align:center;padding:8px;font-size:12px}
+.mock .tabbody{border:1px solid var(--line);border-radius:0 6px 6px 6px;padding:6px 8px}
+.mock .foot{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:8px 10px;border-top:1px solid var(--line);background:var(--code)}
+.mock .foot .sp{flex:1}
+@media (max-width:640px){
+  .mock .mbody{grid-template-columns:1fr}
+  .mock .list div{grid-template-columns:2fr 1.2fr 1.4fr}
+  .mock .list span:nth-child(4){display:none}
 }
 </style>
 </head>
 <body>
-
 <header class="top">
-  <button class="menu-btn" id="menuBtn" aria-label="目次を開く" aria-expanded="false" aria-controls="toc">目次</button>
-  <div class="brand"><span class="mark">avs</span><span>AVS かんたん作成ツール <span class="ver" id="ver"></span></span></div>
-  <div class="spacer"></div>
-  <a class="gh" href="https://github.com/tatata17/avs-maker">GitHub</a>
-  <button class="theme-btn" id="themeBtn" aria-label="明るい表示と暗い表示の切り替え">暗い表示</button>
+  <div class="top-in">
+    <button class="toc-btn" id="tocBtn" type="button" aria-expanded="false" aria-controls="toc">目次</button>
+    <span class="logo" aria-hidden="true">avs</span>
+    <div class="brand">AVS かんたん作成ツール<small>使い方ガイド</small></div>
+    <div class="spacer"></div>
+    <a class="btn ghost" href="https://github.com/tatata17/avs-maker">GitHub</a>
+    <button class="icon-btn" id="theme" type="button" aria-label="ライト/ダークを切り替え" title="ライト/ダークを切り替え">暗い表示</button>
+  </div>
 </header>
 
 <div class="layout">
-<nav class="toc" id="toc">
-  <div class="label">目次</div>
-  <a href="#need"><span class="n">1</span>必要なもの</a>
-  <a href="#setup"><span class="n">2</span>はじめての準備</a>
-  <a href="#basic"><span class="n">3</span>基本の使い方</a>
-  <a href="#screen"><span class="n">4</span>画面の説明</a>
-  <a href="#perfile"><span class="n">5</span>動画ごとの設定・プリセット</a>
-  <a href="#cut"><span class="n">6</span>カット編集と 24p 化</a>
-  <a href="#tune"><span class="n">7</span>補正の決め方</a>
-  <a href="#update"><span class="n">8</span>更新のしかた</a>
-  <a href="#trouble"><span class="n">9</span>困ったとき</a>
-  <a href="#files"><span class="n">10</span>ファイルの一覧</a>
-  <a href="#history"><span class="n">11</span>更新履歴</a>
+<nav class="toc" id="toc" aria-label="目次">
+  <ol>
+    <li><a href="#about"><span class="tn"></span>はじめに</a></li>
+    <li><a href="#need"><span class="tn">01</span>必要なもの</a></li>
+    <li><a href="#setup"><span class="tn">02</span>はじめての準備</a></li>
+    <li><a href="#basic"><span class="tn">03</span>基本の使い方</a></li>
+    <li><a href="#screen"><span class="tn">04</span>画面の説明</a></li>
+    <li><a href="#perfile"><span class="tn">05</span>動画ごとの設定・プリセット</a></li>
+    <li><a href="#cut"><span class="tn">06</span>カット編集と 24p 化</a></li>
+    <li><a href="#tune"><span class="tn">07</span>補正の決め方(おすすめの手順)</a></li>
+    <li><a href="#update"><span class="tn">08</span>更新のしかた</a></li>
+    <li><a href="#trouble"><span class="tn">09</span>困ったとき</a></li>
+    <li><a href="#files"><span class="tn">10</span>ファイルの一覧</a></li>
+    <li><a href="#history"><span class="tn">11</span>更新履歴</a></li>
+  </ol>
 </nav>
 
 <main>
-<div class="hero">
-  <h1>AVS かんたん作成ツール 使い方</h1>
-  <p>VHS などの取り込み動画から AviSynth のスクリプト（.avs）を作り、そのまま ffmpeg（HEVC / NVENC）で mp4 にエンコードする Windows 用のツール <code>avs_maker.pyw</code> の説明です。</p>
-  <div class="chips">
-    <span class="chip">KFMDeint / QTGMC＋SRestore</span>
-    <span class="chip">Levels・Tweak・CCD</span>
-    <span class="chip">比較画像をワンクリックでコピー</span>
-    <span class="chip">チェックする場面をまとめて比較</span>
-    <span class="chip">補正アシスタント</span>
-    <span class="chip">動画ごとの設定・プリセット</span>
-    <span class="chip">ボタンひとつで更新</span>
-  </div>
-  <div class="dl-row">
+<section class="hero" id="about">
+  <h1>AVS かんたん作成ツール</h1>
+  <p>VHS などの取り込み動画から AviSynth のスクリプト(.avs)を作り、そのまま ffmpeg(HEVC / NVENC)で mp4 にエンコードする Windows 用のツール <code>avs_maker.pyw</code> の説明です。</p>
+  <ul class="feat">
+    <li>KFMDeint / QTGMC+SRestore でインターレース解除・24p 化</li>
+    <li>Levels・Tweak・CCD で明るさ・色・色ノイズを補正</li>
+    <li>比較画像をワンクリックでコピー</li>
+    <li>チェックする場面をまとめて比較</li>
+    <li>補正アシスタントで白飛び・黒潰れを確認</li>
+    <li>動画ごとの設定・プリセット</li>
+    <li>ボタンひとつで更新</li>
+  </ul>
+  <div class="row">
     <a class="btn" id="dl" href="https://github.com/tatata17/avs-maker/raw/main/avs_maker.pyw">⬇ avs_maker.pyw をダウンロード</a>
-    <span class="sub"><span id="ver3">最新版を確認中…</span>　2回目からは、ツールの「更新を確認」で入れ替えられます。</span>
+    <span class="ver" id="ver"></span>
+    <span class="ver">2回目からは、ツールの「更新を確認」で入れ替えられます。</span>
   </div>
-  <div class="note" style="margin-top:18px"><b>ヒント</b>ツールのボタン・チェック・入力欄は、マウスを置いて少し待つと説明（ツールチップ）が出ます。</div>
-</div>
+  <p class="note"><b class="lb">ヒント</b>ツールのボタン・チェック・入力欄は、マウスを置いて少し待つと説明(ツールチップ)が出ます。</p>
+</section>
 
-<!-- 1 -->
 <section id="need">
 <h2><span class="n">01</span>必要なもの</h2>
 <div class="table-wrap"><table>
 <tr><th>もの</th><th>用途</th><th>入手先・備考</th></tr>
-<tr><td>Python 3（Windows 版）</td><td class="wrap">ツールを動かす</td><td class="wrap"><a href="https://www.python.org/downloads/windows/" target="_blank" rel="noopener">python.org</a>。インストーラーで <strong>「Add python.exe to PATH」</strong> と <strong>「py launcher」</strong> にチェック（<code>.pyw</code> をダブルクリックで起動できるようになる）</td></tr>
-<tr><td>Pillow・numpy <small class="muted">（ほぼ必須）</small></td><td class="wrap">プレビュー・比較画像・カット編集</td><td class="wrap"><code>pip install pillow numpy</code></td></tr>
-<tr><td>tkinterdnd2 <small class="muted">（任意）</small></td><td class="wrap">ドラッグ＆ドロップ</td><td class="wrap"><code>pip install tkinterdnd2</code>（なくても「ファイルを追加…」で使える）</td></tr>
-<tr><td>AviSynth Neo</td><td class="wrap">通常の処理（KFMDeint・CUDA）</td><td class="wrap"><a href="https://github.com/nekopanda/AviSynthPlus/releases" target="_blank" rel="noopener">nekopanda/AviSynthPlus</a> をインストール。KFMDeint は <a href="https://github.com/nekopanda/AviSynthCUDAFilters/releases" target="_blank" rel="noopener">AviSynthCUDAFilters</a></td></tr>
-<tr><td>AviSynth+ 3.7.5 の avisynth.dll</td><td class="wrap">24p 化（QTGMC＋SRestore）</td><td class="wrap"><a href="https://github.com/AviSynth/AviSynthPlus/releases/tag/v3.7.5" target="_blank" rel="noopener">AviSynth+ v3.7.5</a> の filesonly 版から取り出す。<strong>インストールせず</strong>、24p 用 ffmpeg と同じフォルダに置く</td></tr>
-<tr><td>ffmpeg（2つ）</td><td class="wrap">プレビュー・エンコード</td><td class="wrap"><a href="https://www.gyan.dev/ffmpeg/builds/" target="_blank" rel="noopener">gyan.dev</a> の <strong>full</strong> 版（avisynth に対応）。zip の <code>bin</code> の <code>ffmpeg.exe</code>・<code>ffprobe.exe</code> を使う。通常用と 24p 用の2組</td></tr>
-<tr><td>NVIDIA の GPU とドライバ</td><td class="wrap">HEVC（NVENC）エンコード</td><td class="wrap"><a href="https://www.nvidia.com/ja-jp/drivers/" target="_blank" rel="noopener">NVIDIA のドライバ</a>。新しい ffmpeg は 610 以降が必要</td></tr>
+<tr><td>Python 3(Windows 版)</td><td>ツールを動かす</td><td><a href="https://www.python.org/downloads/windows/" target="_blank" rel="noopener">python.org</a>。インストーラーで <strong>「Add python.exe to PATH」</strong> と <strong>「py launcher」</strong> にチェック(<code>.pyw</code> をダブルクリックで起動できるようになる)</td></tr>
+<tr><td>Pillow・numpy <small class="muted">(ほぼ必須)</small></td><td>プレビュー・比較画像・カット編集</td><td><code>pip install pillow numpy</code></td></tr>
+<tr><td>tkinterdnd2 <small class="muted">(任意)</small></td><td>ドラッグ&amp;ドロップ</td><td><code>pip install tkinterdnd2</code>(なくても「ファイルを追加…」で使える)</td></tr>
+<tr><td>AviSynth Neo</td><td>通常の処理(KFMDeint・CUDA)</td><td><a href="https://github.com/nekopanda/AviSynthPlus/releases" target="_blank" rel="noopener">nekopanda/AviSynthPlus</a> をインストール。KFMDeint は <a href="https://github.com/nekopanda/AviSynthCUDAFilters/releases" target="_blank" rel="noopener">AviSynthCUDAFilters</a></td></tr>
+<tr><td>AviSynth+ 3.7.5 の avisynth.dll</td><td>24p 化(QTGMC＋SRestore)</td><td><a href="https://github.com/AviSynth/AviSynthPlus/releases/tag/v3.7.5" target="_blank" rel="noopener">AviSynth+ v3.7.5</a> の filesonly 版から取り出す。<strong>インストールせず</strong>、24p 用 ffmpeg と同じフォルダに置く</td></tr>
+<tr><td>ffmpeg(2つ)</td><td>プレビュー・エンコード</td><td><a href="https://www.gyan.dev/ffmpeg/builds/" target="_blank" rel="noopener">gyan.dev</a> の <strong>full</strong> 版(avisynth に対応)。zip の <code>bin</code> の <code>ffmpeg.exe</code>・<code>ffprobe.exe</code> を使う。通常用と 24p 用の2組</td></tr>
+<tr><td>NVIDIA の GPU とドライバ</td><td>HEVC(NVENC)エンコード</td><td><a href="https://www.nvidia.com/ja-jp/drivers/" target="_blank" rel="noopener">NVIDIA のドライバ</a>。新しい ffmpeg は 610 以降が必要</td></tr>
 </table></div>
 <p>Pillow などが入っていなくてもツールは起動しますが、その機能だけ使えなくなります。<code>pip</code> のコマンドは、スタートメニューの「コマンドプロンプト」に入力します。</p>
-<div class="note"><b>Python のインストーラーで外さないもの</b>「tcl/tk and IDLE」のチェックは外さないでください（ツールの画面の表示に使います）。初期のままなら入っています。</div>
+<div class="note"><b class="lb">Python のインストーラーで外さないもの</b>「tcl/tk and IDLE」のチェックは外さないでください(ツールの画面の表示に使います)。初期のままなら入っています。</div>
 </section>
 
-<!-- 2 -->
 <section id="setup">
 <h2><span class="n">02</span>はじめての準備</h2>
 
@@ -330,46 +268,44 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
 <p><code>avs_maker.pyw</code> を好きなフォルダに置きます。設定ファイルはこのファイルと同じフォルダに自動で作られるので、フォルダごとコピーすれば、別のパソコンにも設定ごと持っていけます。</p>
 
 <h3>2-2. ffmpeg を2つ用意する</h3>
-<p>ffmpeg は .avs を開くときに <code>avisynth.dll</code> を読み込みます。Windows は <strong>ffmpeg.exe と同じフォルダの avisynth.dll を優先</strong>し、なければパソコンにインストールされた AviSynth（Neo）を使います。この仕組みで、2つの ffmpeg が使う AviSynth を分けます。</p>
+<p>ffmpeg は .avs を開くときに <code>avisynth.dll</code> を読み込みます。Windows は <strong>ffmpeg.exe と同じフォルダの avisynth.dll を優先</strong>し、なければパソコンにインストールされた AviSynth(Neo)を使います。この仕組みで、2つの ffmpeg が使う AviSynth を分けます。</p>
 <div class="table-wrap"><table>
 <tr><th>欄</th><th>例</th><th>同じフォルダの avisynth.dll</th><th>使われる AviSynth</th></tr>
-<tr><td>通常用ffmpeg（Neo）</td><td><code>C:\ffmpeg\neo\ffmpeg.exe</code></td><td><strong>置かない</strong></td><td>インストール済みの Neo</td></tr>
-<tr><td>24p用ffmpeg（3.7.5）</td><td><code>C:\ffmpeg\avs375\ffmpeg.exe</code></td><td>AviSynth+ 3.7.5 のもの</td><td>3.7.5</td></tr>
+<tr><td>通常用ffmpeg(Neo)</td><td><code>C:\ffmpeg\neo\ffmpeg.exe</code></td><td><strong>置かない</strong></td><td>インストール済みの Neo</td></tr>
+<tr><td>24p用ffmpeg(3.7.5)</td><td><code>C:\ffmpeg\avs375\ffmpeg.exe</code></td><td>AviSynth+ 3.7.5 のもの</td><td>3.7.5</td></tr>
 </table></div>
 <ul>
-  <li>フォルダ名は例です。<code>neo</code> は通常用（AviSynth Neo）、<code>avs375</code> は 24p 用（AviSynth+ 3.7.5）の意味で付けています。2つが別のフォルダになっていれば、名前は自由です。</li>
-  <li>ffmpeg.exe の名前は変えても大丈夫です（例：<code>ffmpeg_neo.exe</code>）。欄で選んだファイルがそのまま使われます。</li>
+  <li>フォルダ名は例です。<code>neo</code> は通常用(AviSynth Neo)、<code>avs375</code> は 24p 用(AviSynth+ 3.7.5)の意味で付けています。2つが別のフォルダになっていれば、名前は自由です。</li>
+  <li>ffmpeg.exe の名前は変えても大丈夫です(例：<code>ffmpeg_neo.exe</code>)。欄で選んだファイルがそのまま使われます。</li>
 </ul>
-<div class="warn"><b>注意</b>通常用 ffmpeg のフォルダに 3.7.5 の avisynth.dll があると、Neo 用の avs が 3.7.5 で開かれて「CUDA」のエラーになります。</div>
+<div class="warn"><b class="lb">注意</b>通常用 ffmpeg のフォルダに 3.7.5 の avisynth.dll があると、Neo 用の avs が 3.7.5 で開かれて「CUDA」のエラーになります。</div>
 
 <h3>2-3. 24p 化用のプラグインフォルダを作る</h3>
-<p>24p 化（AviSynth+ 3.7.5 側）は、Neo 用のプラグインと混ざらないように、<strong>このフォルダだけ</strong>を読み込みます。初期値は <code>C:\avs_srestore</code> です。次のものを入れておきます。</p>
+<p>24p 化(AviSynth+ 3.7.5 側)は、Neo 用のプラグインと混ざらないように、<strong>このフォルダだけ</strong>を読み込みます。初期値は <code>C:\avs_srestore</code> です。次のものを入れておきます。</p>
 <div class="cards">
-  <div class="card"><h4>スクリプト（.avsi）</h4><p><code>QTGMC.avsi</code>・<code>Srestore.avsi</code>・<code>Zs_RF_Shared.avsi</code><br><a href="https://github.com/realfinder/AVS-Stuff" target="_blank" rel="noopener">realfinder/AVS-Stuff</a> にあります。Zs_RF_Shared は必須</p></div>
-  <div class="card"><h4>プラグイン（64bit .dll）</h4><p>masktools2・RgTools・mvtools2・nnedi3・TIVTC・Average・grunt</p></div>
-  <div class="card"><h4>CCD を使うとき</h4><p><code>VDubFilter.dll</code>（AviSynth+ 3.7.5 の filesonly 版に入っているもの）</p></div>
-  <div class="card"><h4>AVI 以外を読むとき</h4><p>LSMASHSource（mp4・mkv など）。<a href="https://github.com/HomeOfAviSynthPlusEvolution/L-SMASH-Works/releases" target="_blank" rel="noopener">L-SMASH-Works</a></p></div>
+  <div class="card"><h4>スクリプト(.avsi)</h4><p><code>QTGMC.avsi</code>・<code>Srestore.avsi</code>・<code>Zs_RF_Shared.avsi</code><br><a href="https://github.com/realfinder/AVS-Stuff" target="_blank" rel="noopener">realfinder/AVS-Stuff</a> にあります。Zs_RF_Shared は必須</p></div>
+  <div class="card"><h4>プラグイン(64bit .dll)</h4><p>masktools2・RgTools・mvtools2・nnedi3・TIVTC・Average・grunt</p></div>
+  <div class="card"><h4>CCD を使うとき</h4><p><code>VDubFilter.dll</code>(AviSynth+ 3.7.5 の filesonly 版に入っているもの)</p></div>
+  <div class="card"><h4>AVI 以外を読むとき</h4><p>LSMASHSource(mp4・mkv など)。<a href="https://github.com/HomeOfAviSynthPlusEvolution/L-SMASH-Works/releases" target="_blank" rel="noopener">L-SMASH-Works</a></p></div>
 </div>
-<div class="warn"><b>入れないもの</b><code>SMDegrain.avsi</code> は入れないでください。QTGMC の補助関数と名前がぶつかってエラーになります。</div>
+<div class="warn"><b class="lb">入れないもの</b><code>SMDegrain.avsi</code> は入れないでください。QTGMC の補助関数と名前がぶつかってエラーになります。</div>
 
 <h3>2-4. 初回起動</h3>
 <p><code>avs_maker.pyw</code> をダブルクリックします。④ の ffmpeg の欄が正しいか確認し、違えば「選ぶ…」で選び直します。変えた場所は自動で記録され、次からはその場所が使われます。</p>
 </section>
 
-<!-- 3 -->
 <section id="basic">
 <h2><span class="n">03</span>基本の使い方</h2>
 <ol class="steps">
-  <li><strong>動画を追加</strong>① に動画（またはフォルダ）をドラッグ＆ドロップするか、「ファイルを追加…」。</li>
+  <li><strong>動画を追加</strong>① に動画(またはフォルダ)をドラッグ&amp;ドロップするか、「ファイルを追加…」。</li>
   <li><strong>動画を選ぶ</strong>一覧で選ぶと、右にその動画の1コマが表示され、② にその動画の設定が出ます。</li>
-  <li><strong>設定する</strong>② のチェックと数字を調整します。右のプレビューで補正後の見た目を確認できます（画像を押している間は補正前）。</li>
-  <li><strong>区間を決める（必要なら）</strong>右下の「カット編集」で残す区間を登録し、24p 化する区間に ☑ を付けます。</li>
+  <li><strong>設定する</strong>② のチェックと数字を調整します。右のプレビューで補正後の見た目を確認できます(画像を押している間は補正前)。</li>
+  <li><strong>区間を決める(必要なら)</strong>右下の「カット編集」で残す区間を登録し、24p 化する区間に ☑ を付けます。</li>
   <li><strong>実行</strong>右下の「avsを作成してエンコード」。avs だけ欲しいときは「avsだけ作成」。</li>
 </ol>
-<p>出力先は ③ で選びます（動画と同じフォルダ／指定フォルダ）。同じ名前のファイルがあるときは上書き確認が出ます。</p>
+<p>出力先は ③ で選びます(動画と同じフォルダ／指定フォルダ)。同じ名前のファイルがあるときは上書き確認が出ます。</p>
 </section>
 
-<!-- 4 -->
 <section id="screen">
 <h2><span class="n">04</span>画面の説明</h2>
 
@@ -379,7 +315,7 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
   <div class="mbody">
     <div class="mcol">
       <fieldset><legend>① 動画ファイル</legend>
-        <span class="b">ファイルを追加…</span><span class="b">一覧から外す</span> <span class="muted">← ドラッグ＆ドロップでも追加</span>
+        <span class="b">ファイルを追加…</span><span class="b">一覧から外す</span> <span class="muted">← ドラッグ&amp;ドロップでも追加</span>
         <div class="list">
           <div><span>ファイル名</span><span>処理</span><span>明るさ</span><span>CCD</span></div>
           <div class="sel"><span>テープA.avi</span><span>KFM</span><span>24/1.0/210</span><span>30</span></div>
@@ -389,22 +325,22 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
       </fieldset>
       <fieldset><legend>② 設定</legend>
         <span class="muted">編集中：テープA.avi</span> <span class="b" style="float:right">補正アシスタント…</span><br>
-        ☑ インターレース解除（KFMDeint）　☐ アニメを24pにする<br>
-        ☑ 明るさ補正（Levels）　入力 黒 <span class="b">24</span> 白 <span class="b">210</span><br>
-        ☑ 色相・彩度（Tweak）　☑ 色ノイズ除去（CCD）
+        ☑ インターレース解除(KFMDeint)　☐ アニメを24pにする<br>
+        ☑ 明るさ補正(Levels)　入力 黒 <span class="b">24</span> 白 <span class="b">210</span><br>
+        ☑ 色相・彩度(Tweak)　☑ 色ノイズ除去(CCD)
       </fieldset>
-      <fieldset class="fold"><legend>▶ ③④ 保存先・エンコード（たたんだ状態）</legend>
+      <fieldset class="fold"><legend>▶ ③④ 保存先・エンコード(たたんだ状態)</legend>
         <span class="muted">動画と同じ場所 ／ CQ 20 ／ ffmpeg 2つとも指定済み</span>
       </fieldset>
     </div>
     <div class="mcol">
-      <div class="pv">画像プレビュー<br>（押している間は補正前）</div>
+      <div class="pv">画像プレビュー<br>(押している間は補正前)</div>
       <div><span class="b">◀◀ 1秒</span><span class="b">◀ 1コマ</span><span class="b">1コマ ▶</span><span class="b">1秒 ▶▶</span> 移動先 <span class="b">&nbsp;18743&nbsp;</span></div>
       <div>
-        <div class="tabs"><span class="on">チェックする場面</span><span>カット編集（残す区間）</span></div>
+        <div class="tabs"><span class="on">チェックする場面</span><span>カット編集(残す区間)</span></div>
         <div class="tabbody">
           <span class="b">この場面を覚える</span><span class="b">選んだ場面を忘れる</span><br>
-          <span class="muted">1. 0:07:32.8（フレーム 13569）</span><br>
+          <span class="muted">1. 0:07:32.8(フレーム 13569)</span><br>
           比較画像 <span class="b">コピー</span><span class="b">保存…</span>　まとめて <span class="b">コピー</span><span class="b">保存…</span>
         </div>
       </div>
@@ -413,77 +349,76 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
   <div class="foot"><span class="b">更新を確認</span><span class="b">使い方</span><span class="muted">v1.4.x</span><span class="sp"></span><span class="b">avsだけ作成</span><span class="b go">avsを作成してエンコード</span></div>
 </div>
 <p class="mock-cap">※ 実際の画面を単純化した説明用の図です。</p>
-<div class="legend-grid">
-  <div><b>① 動画ファイル</b><br>動画を入れて選ぶ所。選んだ動画の設定が ② に出ます。</div>
-  <div><b>② 設定</b><br>選んでいる動画の補正。変えるとすぐプレビューに出ます。</div>
-  <div><b>③④</b><br>保存先・画質・ffmpeg の場所。一度決めたらたためます。</div>
-  <div><b>プレビューとタブ</b><br>見比べる場面の登録と比較画像、カット編集はここ。</div>
+<div class="cards">
+  <div class="card"><h4>① 動画ファイル</h4><p>動画を入れて選ぶ所。選んだ動画の設定が ② に出ます。</p></div>
+  <div class="card"><h4>② 設定</h4><p>選んでいる動画の補正。変えるとすぐプレビューに出ます。</p></div>
+  <div class="card"><h4>③④</h4><p>保存先・画質・ffmpeg の場所。一度決めたらたためます。</p></div>
+  <div class="card"><h4>プレビューとタブ</h4><p>見比べる場面の登録と比較画像、カット編集はここ。</p></div>
 </div>
 <ul>
   <li>左の列：① 動画ファイル・② 設定・③④ 保存先とエンコード・avs の中身。</li>
-  <li>右の列：画像プレビュー（いつも見える位置に固定）と、その下のタブ「チェックする場面」「カット編集（残す区間）」。</li>
-  <li>画面に収まらないときは、左の列と右の列が<strong>別々に</strong>スクロールします（マウスを置いた列だけが動きます）。</li>
+  <li>右の列：画像プレビュー(いつも見える位置に固定)と、その下のタブ「チェックする場面」「カット編集(残す区間)」。</li>
+  <li>画面に収まらないときは、左の列と右の列が<strong>別々に</strong>スクロールします(マウスを置いた列だけが動きます)。</li>
   <li>③④ は一度決めたらあまり触らないので、▶ ボタンでたためます。たたんでいる間も、横に「保存先・CQ・ffmpeg の指定状況」が出ます。ffmpeg の場所が決まっていないときは自動で開きます。</li>
 </ul>
 
 <h3>① 動画ファイル</h3>
 <ul>
   <li>一覧には「ファイル名・処理・明るさ・色相／彩度・CCD」の要約が並びます。</li>
-  <li><kbd>Ctrl</kbd>／<kbd>Shift</kbd> で複数選択、<kbd>Ctrl</kbd>+<kbd>A</kbd> で全部選択。<kbd>Delete</kbd> で一覧から外せます（ファイル自体は消えません）。</li>
+  <li><kbd>Ctrl</kbd>／<kbd>Shift</kbd> で複数選択、<kbd>Ctrl</kbd>+<kbd>A</kbd> で全部選択。<kbd>Delete</kbd> で一覧から外せます(ファイル自体は消えません)。</li>
 </ul>
 
-<h3>② 設定（一覧で選んだ動画の設定）</h3>
+<h3>② 設定(一覧で選んだ動画の設定)</h3>
 <p>上の「編集中：〇〇.avi」に、どの動画の設定を触っているかが出ます。</p>
 <div class="table-wrap"><table>
 <tr><th>項目</th><th>内容</th></tr>
-<tr><td>読み込み方法</td><td class="wrap">自動なら avi は AviSource、それ以外は LWLibavVideoSource</td></tr>
-<tr><td>インターレース解除（KFMDeint）</td><td class="wrap">Neo（CUDA）で解除。24コマのアニメ部分は元のコマを組み直し、60i の部分は 59.94p のまま。普通のアニメや実写はこれ</td></tr>
-<tr><td>フィールド順</td><td class="wrap">VHS の取り込みはほぼ TFF</td></tr>
-<tr><td>アニメを24pにする</td><td class="wrap">QTGMC＋SRestore。口や手が二重に見える（フィールドがブレンドされた）アニメ向け。区間を登録しているときは区間ごとの ☑ が優先</td></tr>
-<tr><td>明るさ補正（Levels）</td><td class="wrap">入力 黒を上げると黒が締まる／入力 白を下げると明るくなる。出力は通常 16〜235 のまま</td></tr>
-<tr><td>色相・彩度（Tweak）</td><td class="wrap">色相 −で緑寄り／＋で赤寄り。彩度 1.0 がそのまま</td></tr>
-<tr><td>色ノイズ除去（CCD）</td><td class="wrap">VirtualDub の Color Camcorder Denoise（ツールに内蔵）。閾値 30 が目安</td></tr>
-<tr><td>リサイズ</td><td class="wrap">1440×1056 は 4:3 を正方形ピクセルにした大きさ（15:11）</td></tr>
-<tr><td>色空間変換</td><td class="wrap">BT.601 → BT.709。HD サイズで出すときはオン</td></tr>
+<tr><td>読み込み方法</td><td>自動なら avi は AviSource、それ以外は LWLibavVideoSource</td></tr>
+<tr><td>インターレース解除(KFMDeint)</td><td>Neo(CUDA)で解除。24コマのアニメ部分は元のコマを組み直し、60i の部分は 59.94p のまま。普通のアニメや実写はこれ</td></tr>
+<tr><td>フィールド順</td><td>VHS の取り込みはほぼ TFF</td></tr>
+<tr><td>アニメを24pにする</td><td>QTGMC＋SRestore。口や手が二重に見える(フィールドがブレンドされた)アニメ向け。区間を登録しているときは区間ごとの ☑ が優先</td></tr>
+<tr><td>明るさ補正(Levels)</td><td>入力 黒を上げると黒が締まる／入力 白を下げると明るくなる。出力は通常 16〜235 のまま</td></tr>
+<tr><td>色相・彩度(Tweak)</td><td>色相 −で緑寄り／＋で赤寄り。彩度 1.0 がそのまま</td></tr>
+<tr><td>色ノイズ除去(CCD)</td><td>VirtualDub の Color Camcorder Denoise(ツールに内蔵)。閾値 30 が目安</td></tr>
+<tr><td>リサイズ</td><td>1440×1056(15:11)は、取り込み画面(720×480 の全体)を正方形ピクセルに直した大きさ。左右の縁を含むぶん、4:3 ぴったりより少し横長</td></tr>
+<tr><td>色空間変換</td><td>BT.601 → BT.709。HD サイズで出すときはオン</td></tr>
 </table></div>
 
 <h3>③ avs と mp4 の保存先 ／ ④ エンコード</h3>
 <ul>
-  <li>HEVC（NVENC）p7 / Main10 / BT.709、音声は FLAC（圧縮レベル 8）。</li>
-  <li>画質 CQ は小さいほど高画質（VHS の保存用なら 18〜20）。</li>
+  <li>HEVC(NVENC)p7 / Main10 / BT.709、音声は FLAC(圧縮レベル 8)。</li>
+  <li>画質 CQ は小さいほど高画質(VHS の保存用なら 18〜20)。</li>
   <li>ffmpeg が <code>-tune uhq</code> に対応していないときは、確認のうえ <code>-tune hq</code> で続けます。</li>
 </ul>
 
 <h3>画像プレビュー</h3>
 <ul>
-  <li>画像を押している間は「補正前」、離すと「補正後（Levels/Tweak の見本）」。</li>
+  <li>画像を押している間は「補正前」、離すと「補正後(Levels/Tweak の見本)」。</li>
   <li>画像を押したあと <kbd>←</kbd><kbd>→</kbd> で1コマ、<kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd> で1秒移動。</li>
-  <li><strong>移動先</strong>の欄にフレーム番号（例：<code>18743</code>）か時間（例：<code>10:25.4</code>、<code>1:02:03</code>）を入れて <kbd>Enter</kbd> で、その場面へ移動。</li>
+  <li><strong>移動先</strong>の欄にフレーム番号(例：<code>18743</code>)か時間(例：<code>10:25.4</code>、<code>1:02:03</code>)を入れて <kbd>Enter</kbd> で、その場面へ移動。</li>
   <li>プレビューの大きさは、ウインドウの大きさに合わせて自動で変わります。</li>
-  <li><strong>今の場面の比較画像</strong>（「チェックする場面」タブの「コピー／保存…」）：左に補正前、右に補正後を並べ、下にファイル名・フレーム番号・設定を書き込んだ画像を作ります。「コピー」してチャットに <kbd>Ctrl</kbd>+<kbd>V</kbd> で貼れます。</li>
+  <li><strong>今の場面の比較画像</strong>(「チェックする場面」タブの「コピー／保存…」)：左に補正前、右に補正後を並べ、下にファイル名・フレーム番号・設定を書き込んだ画像を作ります。「コピー」してチャットに <kbd>Ctrl</kbd>+<kbd>V</kbd> で貼れます。</li>
 </ul>
 <h3>チェックする場面</h3>
 <p>設定を変えるたびに、同じ場面を見直すための機能です。</p>
 <ol class="steps">
-  <li><strong>場面を覚える</strong>見比べたい場面（一番明るい場面・暗い場面・顔のアップなど）で「この場面を覚える」。1本の動画に8つまで。</li>
+  <li><strong>場面を覚える</strong>見比べたい場面(一番明るい場面・暗い場面・顔のアップなど)で「この場面を覚える」。1本の動画に8つまで。</li>
   <li><strong>すぐ移動</strong>リストをクリックすると、その場面へすぐ移動します。</li>
-  <li><strong>まとめて比較</strong>「まとめてコピー」で、覚えた場面すべての比較画像（左＝補正前／右＝補正後）を縦に並べた1枚がコピーされます。いちばん下に設定の要約が入ります。「まとめて保存…」で画像として保存もできます。</li>
+  <li><strong>まとめて比較</strong>「まとめてコピー」で、覚えた場面すべての比較画像(左＝補正前／右＝補正後)を縦に並べた1枚がコピーされます。いちばん下に設定の要約が入ります。「まとめて保存…」で画像として保存もできます。</li>
 </ol>
-<p>覚えた場面は動画ごとに記録され、次に同じ動画を追加したときも残っています（同じ名前でも中身が違うファイルでは消えます）。</p>
-<h3>補正アシスタント（上級者向け）</h3>
+<p>覚えた場面は動画ごとに記録され、次に同じ動画を追加したときも残っています(同じ名前でも中身が違うファイルでは消えます)。</p>
+<h3>補正アシスタント(上級者向け)</h3>
 <p>② の右上の「<strong>補正アシスタント…</strong>」で別ウインドウが開きます。覚えた場面を大きく表示して、補正を詰めるための道具です。ウインドウの大きさは自由に変えられます。</p>
 <div class="cards">
-  <div class="card"><h4>白飛び・黒潰れを色で表示</h4><p>模様が消えている所を、赤の斜線（白飛び）と青の斜線（黒潰れ）で塗ります。潰れているのが背景だけか、顔の影までかが一目で分かります。黄色の点線の外（VHS の端の縁など）は判定しません。</p></div>
-  <div class="card"><h4>場面ごとの判定</h4><p>白飛び・黒潰れの割合と、補正後の一番暗い所（最暗部。大きいと黒が浮いている）。赤字は多めの場面です。</p></div>
+  <div class="card"><h4>白飛び・黒潰れを色で表示</h4><p>模様が消えている所を、赤の斜線(白飛び)と青の斜線(黒潰れ)で塗ります。潰れているのが背景だけか、顔の影までかが一目で分かります。黄色の点線の外(VHS の端の縁など)は判定しません。</p></div>
+  <div class="card"><h4>場面ごとの判定</h4><p>白飛び・黒潰れの割合と、補正後の一番暗い所(最暗部。大きいと黒が浮いている)。赤字は多めの場面です。</p></div>
   <div class="card"><h4>黒は演出／白は演出</h4><p>☑ にすると、その場面のその判定をおすすめ値の計算から外します。夜空の黒、クレジットの文字の影、光る物など、潰れていて正しい場面に。</p></div>
   <div class="card"><h4>おすすめの明るさ</h4><p>どの場面も潰れにくい「入力 黒」「入力 白」。どの場面で値が決まったかも表示します。「この値を使う」でメイン画面に入ります。</p></div>
-  <div class="card"><h4>肌の色</h4><p>画像の肌をクリックして見本に登録（右クリックで消す）。自然な範囲（24〜42°）から外れているときだけ、範囲に入る一番小さな色相を提案します。</p></div>
+  <div class="card"><h4>肌の色</h4><p>画像の肌をクリックして見本に登録(右クリックで消す)。自然な範囲(24〜42°)から外れているときだけ、範囲に入る一番小さな色相を提案します。</p></div>
 </div>
-<p>表示は「補正後」「補正前」「左右で比べる」（下のつまみで境目を動かせる）から選べます。演出のチェックと肌の見本は動画ごとに記録されます。</p>
-<div class="note"><b>プレビューで分かるもの</b>補正後の見本に反映されるのは Levels と Tweak だけです。インターレース解除・CCD・24p 化の効果は出ません（CCD がオンのときは注意書きが出ます）。</div>
+<p>表示は「補正後」「補正前」「左右で比べる」(下のつまみで境目を動かせる)から選べます。演出のチェックと肌の見本は動画ごとに記録されます。</p>
+<div class="note"><b class="lb">プレビューで分かるもの</b>補正後の見本に反映されるのは Levels と Tweak だけです。インターレース解除・CCD・24p 化の効果は出ません(CCD がオンのときは注意書きが出ます)。</div>
 </section>
 
-<!-- 5 -->
 <section id="perfile">
 <h2><span class="n">05</span>動画ごとの設定・プリセット</h2>
 
@@ -492,7 +427,7 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
   <li>② を変えると、<strong>一覧で選んでいる動画にだけ</strong>反映されます。</li>
   <li>複数選んで変えると、<strong>変えた項目だけ</strong>が選んだ全部に反映されます。値が動画ごとに違う項目は「※選んだ動画で値が違う項目：…」と赤字で出ます。</li>
   <li>新しく追加した動画は、そのとき選んでいた動画の設定を引き継ぎます。</li>
-  <li>ffmpeg の場所・保存先・画質（CQ）・24p 用プラグインのフォルダは、全部の動画で共通です。</li>
+  <li>ffmpeg の場所・保存先・画質(CQ)・24p 用プラグインのフォルダは、全部の動画で共通です。</li>
 </ul>
 
 <div class="cards">
@@ -504,14 +439,13 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
 <h3>自動の記録</h3>
 <p>ツールと同じフォルダの <code>avs_maker_動画ごとの設定とプリセット.json</code> に、動画ごとの設定とプリセットをまとめて保存します。</p>
 <ul>
-  <li>同じ<strong>ファイル名</strong>の動画を次に追加すると、設定が戻ります（「前回の設定を復元しました」と表示）。</li>
-  <li>カット区間は、ファイルの大きさが同じとき（同じ中身のとき）だけ戻します。同じ名前で取り込み直したファイルに古い区間が付くのを防ぐためです。</li>
+  <li>同じ<strong>ファイル名</strong>の動画を次に追加すると、設定が戻ります(「前回の設定を復元しました」と表示)。</li>
+  <li>カット区間は、ファイルの大きさが同じとき(同じ中身のとき)だけ戻します。同じ名前で取り込み直したファイルに古い区間が付くのを防ぐためです。</li>
   <li>別々のフォルダに同じ名前の動画があるときは、最後に使ったほうの設定が出ます。</li>
   <li>記録は最大 2000 本。設定は変えてから約1秒後に自動保存されます。</li>
 </ul>
 </section>
 
-<!-- 6 -->
 <section id="cut">
 <h2><span class="n">06</span>カット編集と 24p 化</h2>
 
@@ -521,34 +455,33 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
   <li>「この区間を残す ＋」。開始点だけなら最後まで、終了点だけなら先頭からそこまで。</li>
   <li>区間名をダブルクリックすると、その区間の開始位置へ移動します。</li>
 </ol>
-<p>区間のフレーム番号は、取り込んだままの動画（29.97fps）の番号です。</p>
-<p>リストの上の「区間の表示」で、<strong>時間・フレーム番号・両方</strong>を切り替えられます（初期は両方。選んだものは次の起動でも同じ）。フレーム番号だけにすると、長さも「コマ数」で出ます。</p>
+<p>区間のフレーム番号は、取り込んだままの動画(29.97fps)の番号です。</p>
+<p>リストの上の「区間の表示」で、<strong>時間・フレーム番号・両方</strong>を切り替えられます(初期は両方。選んだものは次の起動でも同じ)。フレーム番号だけにすると、長さも「コマ数」で出ます。</p>
 
 <h3>区間ごとの 24p 化</h3>
-<p>区間リストの左端の □ を押すと、その区間だけ 24p 化（QTGMC＋SRestore）が ☑ になります。</p>
+<p>区間リストの左端の □ を押すと、その区間だけ 24p 化(QTGMC＋SRestore)が ☑ になります。</p>
 <ul>
-  <li>24p 化する区間が1つでもある動画は、全部の区間を QTGMC で 59.94p にしてから、☑ の区間だけ SRestore で 24p にし、59.94p に戻して（同じコマを複製して）1本につなぎます。24p 用 ffmpeg（3.7.5）でエンコードされます。</li>
+  <li>24p 化する区間が1つでもある動画は、全部の区間を QTGMC で 59.94p にしてから、☑ の区間だけ SRestore で 24p にし、59.94p に戻して(同じコマを複製して)1本につなぎます。24p 用 ffmpeg(3.7.5)でエンコードされます。</li>
 </ul>
-<div class="warn"><b>59.94p のまま残すもの</b>下から上に流れる文字（警告文・スクロールするクレジット）や、ビデオ編集で付けたパン・ディゾルブは 60i で作られていることが多いので、24p 化しない区間にします。24p 化するとカクカクになります。</div>
+<div class="warn"><b class="lb">59.94p のまま残すもの</b>下から上に流れる文字(警告文・スクロールするクレジット)や、ビデオ編集で付けたパン・ディゾルブは 60i で作られていることが多いので、24p 化しない区間にします。24p 化するとカクカクになります。</div>
 
 <h3>KFMDeint と 24p 化の使い分け</h3>
 <div class="table-wrap"><table>
 <tr><th>素材</th><th>おすすめ</th></tr>
-<tr><td>普通のアニメ（テレシネがきれい）</td><td class="wrap">KFMDeint（24p 化なし）。24コマ部分と 60i 部分を自動で見分ける</td></tr>
-<tr><td>実写・ホームビデオ</td><td class="wrap">KFMDeint</td></tr>
-<tr><td>口や手、鳥などが二重に見えるアニメ</td><td class="wrap">本編を 24p 化。警告文などは 59.94p のまま</td></tr>
+<tr><td>普通のアニメ(テレシネがきれい)</td><td>KFMDeint(24p 化なし)。24コマ部分と 60i 部分を自動で見分ける</td></tr>
+<tr><td>実写・ホームビデオ</td><td>KFMDeint</td></tr>
+<tr><td>口や手、鳥などが二重に見えるアニメ</td><td>本編を 24p 化。警告文などは 59.94p のまま</td></tr>
 </table></div>
 <p>見分け方：動きのある場面で二重像が出るか見ます。KFMDeint で二重像が出て、24p 化で消えるなら 24p 化です。</p>
 </section>
 
-<!-- 7 -->
 <section id="tune">
-<h2><span class="n">07</span>補正の決め方（おすすめの手順）</h2>
+<h2><span class="n">07</span>補正の決め方(おすすめの手順)</h2>
 <ol class="steps">
-  <li><strong>場面を選ぶ</strong>一番明るい場面（白い紙・雲・窓・クレジットの文字）、一番暗い場面（夜・黒い服）、人物の顔のアップを探します。</li>
-  <li><strong>明るさ（Levels）</strong>一番明るい場面で白が上限に張り付かない（白飛びしない）ところまで「入力 白」を下げ、暗い場面で影が潰れないところまで「入力 黒」を上げます。クレジットの白い文字の中が上限に届くのは問題ありません。</li>
-  <li><strong>色（Tweak）</strong>顔のアップで肌の色を見ます。肌がピンク〜赤っぽいテープだけ色相を −5〜−10。もともと自然なら色補正はしません（回しすぎると赤い物がオレンジに、肌が黄色っぽくなります）。白い雲などの「色かぶり」は色相では直りません。</li>
-  <li><strong>補正アシスタントで詰める（任意）</strong>覚えた場面の白飛び・黒潰れの判定と、明るさ・肌の色のおすすめ値を出せます。暗い／明るいのが演出の場面は ☑ で外します。</li>
+  <li><strong>場面を選ぶ</strong>一番明るい場面(白い紙・雲・窓・クレジットの文字)、一番暗い場面(夜・黒い服)、人物の顔のアップを探します。</li>
+  <li><strong>明るさ(Levels)</strong>一番明るい場面で白が上限に張り付かない(白飛びしない)ところまで「入力 白」を下げ、暗い場面で影が潰れないところまで「入力 黒」を上げます。クレジットの白い文字の中が上限に届くのは問題ありません。</li>
+  <li><strong>色(Tweak)</strong>顔のアップで肌の色を見ます。肌がピンク〜赤っぽいテープだけ色相を −5〜−10。もともと自然なら色補正はしません(回しすぎると赤い物がオレンジに、肌が黄色っぽくなります)。白い雲などの「色かぶり」は色相では直りません。</li>
+  <li><strong>補正アシスタントで詰める(任意)</strong>覚えた場面の白飛び・黒潰れの判定と、明るさ・肌の色のおすすめ値を出せます。暗い／明るいのが演出の場面は ☑ で外します。</li>
   <li><strong>比較画像で確認</strong>1で探した場面を「この場面を覚える」で登録しておき、設定を変えるたびに「まとめてコピー」。全部の場面の補正前／補正後が1枚にそろうので、チャットに貼って相談すると早いです。</li>
   <li><strong>使い回す</strong>同じシリーズ・同じ取り込み方なら、1本目の設定をプリセットにして使い回し、巻ごとに肌の色だけ確認します。</li>
 </ol>
@@ -556,16 +489,15 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
 <h3>設定例</h3>
 <div class="table-wrap"><table>
 <tr><th>素材</th><th>設定</th></tr>
-<tr><td>安定装置で明るさ −16 にして取り込んだテープ</td><td class="wrap"><code>Levels(24, 1.0, 210, 16, 235)</code>、色補正は肌を見て 0 か −5</td></tr>
-<tr><td>肌がピンク寄りのアニメ</td><td class="wrap"><code>Tweak(hue=-10)</code>、必要なら彩度 1.1〜1.15</td></tr>
-<tr><td>実写の舞台（スポットライトあり）</td><td class="wrap">白飛びしやすいので「入力 白」は控えめ（220 前後）か補正なし</td></tr>
+<tr><td>安定装置で明るさ −16 にして取り込んだテープ</td><td><code>Levels(24, 1.0, 210, 16, 235)</code>、色補正は肌を見て 0 か −5</td></tr>
+<tr><td>肌がピンク寄りのアニメ</td><td><code>Tweak(hue=-10)</code>、必要なら彩度 1.1〜1.15</td></tr>
+<tr><td>実写の舞台(スポットライトあり)</td><td>白飛びしやすいので「入力 白」は控えめ(220 前後)か補正なし</td></tr>
 </table></div>
 </section>
 
-<!-- 8 -->
 <section id="update">
 <h2><span class="n">08</span>更新のしかた</h2>
-<p>ツール左下の「<strong>更新を確認</strong>」を押します（横に今の版番号が表示されています）。</p>
+<p>ツール左下の「<strong>更新を確認</strong>」を押します(横に今の版番号が表示されています)。</p>
 <ol class="steps">
   <li><strong>確認</strong>GitHub の <code>version.json</code> と比べ、同じなら「最新版です」。</li>
   <li><strong>変更内容を表示</strong>新しい版があれば、何が変わったかを表示します。「はい」でダウンロード。</li>
@@ -573,157 +505,145 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line);
   <li><strong>前の版は残る</strong>前の版は <code>avs_maker_old.pyw</code> として残ります。新しい版で不具合が出たら、それを起動すれば戻せます。</li>
   <li><strong>再起動</strong>再起動すると新しい版になります。</li>
 </ol>
-<div class="note"><b>設定は消えません</b><code>avs_maker_settings.json</code> と <code>avs_maker_動画ごとの設定とプリセット.json</code> はそのまま残ります。GitHub への反映直後は、数分ほど古い版が案内されることがあります。</div>
+<div class="note"><b class="lb">設定は消えません</b><code>avs_maker_settings.json</code> と <code>avs_maker_動画ごとの設定とプリセット.json</code> はそのまま残ります。GitHub への反映直後は、数分ほど古い版が案内されることがあります。</div>
 </section>
 
-<!-- 9 -->
 <section id="trouble">
 <h2><span class="n">09</span>困ったとき</h2>
 <div class="table-wrap"><table>
 <tr><th>症状・メッセージ</th><th>原因と対処</th></tr>
-<tr><td class="wrap"><code>This Avisynth does not support memory type 2 (CUDA)</code></td><td class="wrap">Neo 用の avs を 3.7.5 で開いている。通常用 ffmpeg のフォルダに 3.7.5 の avisynth.dll を置かない</td></tr>
-<tr><td class="wrap">「このffmpegは -tune uhq に対応していません」</td><td class="wrap">古い ffmpeg。「はい」で <code>-tune hq</code> で続けられる（差はごくわずか）。新しい ffmpeg を選べば出なくなる</td></tr>
-<tr><td class="wrap"><code>Driver does not support the required nvenc API version</code></td><td class="wrap">NVIDIA ドライバが古い。610 以降（Studio ドライバ推奨）に更新</td></tr>
-<tr><td class="wrap"><code>I don't know what "AvsPlusVersionNumber" means</code> など（24p 化）</td><td class="wrap">24p 用プラグインフォルダに <code>Zs_RF_Shared.avsi</code> などが足りない（2-3 参照）</td></tr>
-<tr><td class="wrap"><code>LoadVirtualDubPlugin</code> がない（24p 化＋CCD）</td><td class="wrap">24p 用プラグインフォルダに <code>VDubFilter.dll</code> を入れる</td></tr>
-<tr><td class="wrap"><code>RequestLinear: internal error (frame not cached)</code></td><td class="wrap">プレビューで大きくシークしたときに出る。エンコードは先頭から順番なので通常は出ない。区間の少し前から送って確認する</td></tr>
-<tr><td class="wrap">プレビューが真っ黒・「先頭のコマを表示しています」</td><td class="wrap">動画の長さを読めていない。「この場面を取り直す」で読み直す。ffprobe（ffmpeg と同じフォルダ）を確認</td></tr>
-<tr><td class="wrap">エンコードが途中で止まったまま進まない</td><td class="wrap">ドライバ更新直後の初回などに起きることがある。中止してやり直す</td></tr>
-<tr><td class="wrap">24p 化した区間でスクロールやパンがカクカク</td><td class="wrap">その場面が 60i で作られている。その区間を 24p 化しない区間に分ける</td></tr>
-<tr><td class="wrap">24p 化しても二重像が少し残る</td><td class="wrap">元のテープで前後のコマが全部混ざっている場面。ソフトではほぼ限界</td></tr>
-<tr><td class="wrap">日本語のパスで avs が開けない</td><td class="wrap">avs は cp932 で保存します。扱えない文字があるときは UTF-8 で保存し、作成時にお知らせが出ます</td></tr>
+<tr><td><code>This Avisynth does not support memory type 2 (CUDA)</code></td><td>Neo 用の avs を 3.7.5 で開いている。通常用 ffmpeg のフォルダに 3.7.5 の avisynth.dll を置かない</td></tr>
+<tr><td>「このffmpegは -tune uhq に対応していません」</td><td>古い ffmpeg。「はい」で <code>-tune hq</code> で続けられる(差はごくわずか)。新しい ffmpeg を選べば出なくなる</td></tr>
+<tr><td><code>Driver does not support the required nvenc API version</code></td><td>NVIDIA ドライバが古い。610 以降(Studio ドライバ推奨)に更新</td></tr>
+<tr><td><code>I don't know what "AvsPlusVersionNumber" means</code> など(24p 化)</td><td>24p 用プラグインフォルダに <code>Zs_RF_Shared.avsi</code> などが足りない(2-3 参照)</td></tr>
+<tr><td><code>LoadVirtualDubPlugin</code> がない(24p 化＋CCD)</td><td>24p 用プラグインフォルダに <code>VDubFilter.dll</code> を入れる</td></tr>
+<tr><td><code>RequestLinear: internal error (frame not cached)</code></td><td>プレビューで大きくシークしたときに出る。エンコードは先頭から順番なので通常は出ない。区間の少し前から送って確認する</td></tr>
+<tr><td>プレビューが真っ黒・「先頭のコマを表示しています」</td><td>動画の長さを読めていない。「この場面を取り直す」で読み直す。ffprobe(ffmpeg と同じフォルダ)を確認</td></tr>
+<tr><td>エンコードが途中で止まったまま進まない</td><td>ドライバ更新直後の初回などに起きることがある。中止してやり直す</td></tr>
+<tr><td>24p 化した区間でスクロールやパンがカクカク</td><td>その場面が 60i で作られている。その区間を 24p 化しない区間に分ける</td></tr>
+<tr><td>24p 化しても二重像が少し残る</td><td>元のテープで前後のコマが全部混ざっている場面。ソフトではほぼ限界</td></tr>
+<tr><td>日本語のパスで avs が開けない</td><td>avs は cp932 で保存します。扱えない文字があるときは UTF-8 で保存し、作成時にお知らせが出ます</td></tr>
 </table></div>
-<p>ffmpeg のエラーで失敗したときは、mp4 と同じ場所に <code>〇〇_ffmpeg.log</code>（実行したコマンドと ffmpeg の出力）が保存されます。</p>
+<p>ffmpeg のエラーで失敗したときは、mp4 と同じ場所に <code>〇〇_ffmpeg.log</code>(実行したコマンドと ffmpeg の出力)が保存されます。</p>
 </section>
 
-<!-- 10 -->
 <section id="files">
 <h2><span class="n">10</span>ファイルの一覧</h2>
 <h3>GitHub のリポジトリ</h3>
 <div class="table-wrap"><table>
 <tr><th>ファイル</th><th>内容</th></tr>
-<tr><td><code>avs_maker.pyw</code></td><td class="wrap">ツール本体。<code>APP_VERSION</code> が版番号</td></tr>
-<tr><td><code>version.json</code></td><td class="wrap">最新の版番号と変更内容（更新ボタンが読みに来る）</td></tr>
-<tr><td><code>docs/index.html</code></td><td class="wrap">このページ</td></tr>
+<tr><td><code>avs_maker.pyw</code></td><td>ツール本体。<code>APP_VERSION</code> が版番号</td></tr>
+<tr><td><code>version.json</code></td><td>最新の版番号と変更内容(更新ボタンが読みに来る)</td></tr>
+<tr><td><code>docs/index.html</code></td><td>このページ</td></tr>
 </table></div>
 <h3>ツールのフォルダに自動で作られるもの</h3>
 <div class="table-wrap"><table>
 <tr><th>ファイル</th><th>内容</th></tr>
-<tr><td><code>avs_maker_settings.json</code></td><td class="wrap">共通の設定（ffmpeg の場所・保存先・画質など）と、最後に使った設定</td></tr>
-<tr><td><code>avs_maker_動画ごとの設定とプリセット.json</code></td><td class="wrap">動画ごとの設定・カット区間・チェックする場面・演出のチェック・肌の見本・プリセット</td></tr>
-<tr><td><code>ccd_64bit.vdf</code></td><td class="wrap">内蔵の CCD フィルタを書き出したもの（CCD を使うと作られる）</td></tr>
-<tr><td><code>avs_maker_old.pyw</code></td><td class="wrap">更新したときの、前の版</td></tr>
+<tr><td><code>avs_maker_settings.json</code></td><td>共通の設定(ffmpeg の場所・保存先・画質など)と、最後に使った設定</td></tr>
+<tr><td><code>avs_maker_動画ごとの設定とプリセット.json</code></td><td>動画ごとの設定・カット区間・チェックする場面・演出のチェック・肌の見本・プリセット</td></tr>
+<tr><td><code>ccd_64bit.vdf</code></td><td>内蔵の CCD フィルタを書き出したもの(CCD を使うと作られる)</td></tr>
+<tr><td><code>avs_maker_old.pyw</code></td><td>更新したときの、前の版</td></tr>
 </table></div>
 </section>
 
-<!-- 11 -->
 <section id="history">
 <h2><span class="n">11</span>更新履歴</h2>
-<p>新しい順に並んでいます。ツールの「更新を確認」で、最新の版に入れ替えられます。それより前の版は、いちばん下をクリックすると開きます。</p>
-<div id="historyList"><p class="muted">読み込んでいます…</p></div>
-<noscript><p><a href="https://github.com/tatata17/avs-maker/blob/main/changelog.json">更新履歴（GitHub）</a></p></noscript>
+<p>新しい順に並んでいます。ツールの「更新を確認」で、最新の版に入れ替えられます。古い日付は折りたたんであり、クリックすると開きます。</p>
+<div id="cl"><p class="muted">読み込んでいます…</p></div>
+<noscript><p><a href="https://github.com/tatata17/avs-maker/blob/main/changelog.json">更新履歴(GitHub)</a></p></noscript>
 </section>
 
 <footer>
-  最新の版：<span id="ver2">—</span>　／　<a href="https://github.com/tatata17/avs-maker">GitHub リポジトリ</a>
+  <a href="https://github.com/tatata17/avs-maker">GitHub リポジトリ</a> ・ 不具合やご要望は <a href="https://github.com/tatata17/avs-maker/issues">Issues</a> へ
 </footer>
 </main>
 </div>
 
+<script>window.DOC={repo:"tatata17/avs-maker",file:"avs_maker.pyw",changelog:"https://raw.githubusercontent.com/tatata17/avs-maker/main/changelog.json",changelogPath:"changelog.json"};</script>
 <script>
-// 版番号を version.json から表示
-fetch("https://raw.githubusercontent.com/tatata17/avs-maker/main/version.json?t=" + Date.now())
-  .then(r => r.ok ? r.json() : null).catch(() => null).then(d => {
-  if (d && d.version) {
-    document.getElementById("ver").textContent = "v" + d.version;
-    document.getElementById("ver2").textContent = "v" + d.version + (d.date ? "（" + d.date + "）" : "");
-    document.getElementById("ver3").textContent = "最新版：v" + d.version + (d.date ? "（" + d.date + "）" : "") + "。";
-  } else {
-    document.getElementById("ver3").textContent = "";
-  }
-});
+(function(){
+  var C=window.DOC||{};
+  var root=document.documentElement;
+  function $(id){return document.getElementById(id);}
+  function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
 
-// ダウンロード（GitHub はそのままだと画面に文字を表示してしまうので、ファイルとして保存させる）
-document.getElementById("dl").addEventListener("click", ev => {
-  ev.preventDefault();
-  const url = "https://raw.githubusercontent.com/tatata17/avs-maker/main/avs_maker.pyw";
-  fetch(url + "?t=" + Date.now(), { cache: "no-store" })
-    .then(r => { if (!r.ok) throw new Error(); return r.blob(); })
-    .then(b => {
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(b); a.download = "avs_maker.pyw";
-      document.body.appendChild(a); a.click();
-      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-    })
-    .catch(() => { location.href = "https://github.com/tatata17/avs-maker/raw/main/avs_maker.pyw"; });
-});
-
-// 更新履歴を changelog.json から表示
-(function () {
-  const box = document.getElementById("historyList");
-  const esc = t => String(t).replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
-  fetch("https://raw.githubusercontent.com/tatata17/avs-maker/main/changelog.json?t=" + Date.now())
-    .then(r => r.ok ? r.json() : Promise.reject())
-    .then(d => {
-      const card = (r, i) =>
-        '<div class="release"><h4>' + (/^\d/.test(r.version) ? "v" : "") + esc(r.version) +
-        '<span class="date">' + esc(r.date || "") + "</span>" + (i === 0 ? '<span class="new">最新</span>' : "") +
-        "</h4><ul>" + [].concat(r.notes || []).map(n => "<li>" + esc(n) + "</li>").join("") + "</ul></div>";
-      const all = d.releases || [], SHOW = 3;
-      const rest = all.slice(SHOW);
-      box.innerHTML = all.slice(0, SHOW).map(card).join("") +
-        (rest.length ? '<details class="older"><summary>それより前の版（' + rest.length + ' 件）</summary>' +
-                       rest.map((r, i) => card(r, i + SHOW)).join("") + "</details>" : "");
-    })
-    .catch(() => {
-      box.innerHTML = '<p>読み込めませんでした。<a href="https://github.com/tatata17/avs-maker/blob/main/changelog.json">GitHub の更新履歴</a>をご覧ください。</p>';
-    });
-})();
-
-// 表の各セルに見出しの名前を付ける（スマホのカード表示で使う）
-document.querySelectorAll(".table-wrap table").forEach(t => {
-  const head = [...t.rows[0].cells].map(c => c.textContent.trim());
-  [...t.rows].slice(1).forEach(r => [...r.cells].forEach((c, i) => { if (head[i]) c.dataset.label = head[i]; }));
-});
-
-// 今読んでいる章を目次で強調
-const links = [...document.querySelectorAll("nav.toc a")];
-const sections = links.map(a => document.querySelector(a.getAttribute("href")));
-const spy = new IntersectionObserver(entries => {
-  entries.forEach(e => {
-    if (e.isIntersecting) {
-      links.forEach(a => a.classList.toggle("active", a.getAttribute("href") === "#" + e.target.id));
-    }
+  // 明るい/暗い表示の切り替え(選んだものはこのブラウザに覚える)
+  var themeBtn=$("theme");
+  function isDark(){var t=root.getAttribute("data-theme");return t?t==="dark":matchMedia("(prefers-color-scheme: dark)").matches;}
+  function syncTheme(){themeBtn.textContent=isDark()?"明るい表示":"暗い表示";}
+  themeBtn.addEventListener("click",function(){
+    var next=isDark()?"light":"dark";root.setAttribute("data-theme",next);
+    try{localStorage.setItem("theme",next);}catch(e){}
+    syncTheme();
   });
-}, { rootMargin: "-70px 0px -70% 0px" });
-sections.forEach(s => s && spy.observe(s));
+  syncTheme();
 
-// スマホ用の目次
-// （目次ボタンで開閉。項目を押す・目次の外を押す・Esc キーで閉じる）
-const toc = document.getElementById("toc");
-const menuBtn = document.getElementById("menuBtn");
-const closeToc = () => { toc.classList.remove("open"); menuBtn.setAttribute("aria-expanded", "false"); };
-menuBtn.addEventListener("click", ev => {
-  ev.stopPropagation();
-  menuBtn.setAttribute("aria-expanded", toc.classList.toggle("open") ? "true" : "false");
-});
-links.forEach(a => a.addEventListener("click", closeToc));
-document.addEventListener("click", ev => { if (!toc.contains(ev.target)) closeToc(); });
-document.addEventListener("keydown", ev => { if (ev.key === "Escape") closeToc(); });
+  // スマホの目次(ボタンで開閉。項目を押す・外を押す・Esc で閉じる)
+  var toc=$("toc"),tocBtn=$("tocBtn");
+  function closeToc(){toc.classList.remove("open");tocBtn.setAttribute("aria-expanded","false");}
+  tocBtn.addEventListener("click",function(ev){ev.stopPropagation();var o=toc.classList.toggle("open");tocBtn.setAttribute("aria-expanded",o?"true":"false");});
+  toc.addEventListener("click",function(ev){if(ev.target.closest("a"))closeToc();});
+  document.addEventListener("click",function(ev){if(!toc.contains(ev.target))closeToc();});
+  document.addEventListener("keydown",function(ev){if(ev.key==="Escape")closeToc();});
 
-// 明るい／暗い表示の切り替え（選んだものはこのブラウザに覚える）
-const root = document.documentElement;
-const themeBtn = document.getElementById("themeBtn");
-const isDark = () => root.dataset.theme ? root.dataset.theme === "dark"
-                                        : matchMedia("(prefers-color-scheme: dark)").matches;
-const syncThemeBtn = () => { themeBtn.textContent = isDark() ? "明るい表示" : "暗い表示"; };
-try { const t = localStorage.getItem("theme"); if (t) root.dataset.theme = t; } catch (e) {}
-syncThemeBtn();
-themeBtn.addEventListener("click", () => {
-  root.dataset.theme = isDark() ? "light" : "dark";
-  try { localStorage.setItem("theme", root.dataset.theme); } catch (e) {}
-  syncThemeBtn();
-});
+  // 今読んでいる章を目次で強調
+  var links=[].slice.call(document.querySelectorAll("nav.toc a"));
+  var map={};links.forEach(function(a){map[a.getAttribute("href").slice(1)]=a;});
+  if("IntersectionObserver" in window){
+    var io=new IntersectionObserver(function(es){es.forEach(function(e){
+      if(e.isIntersecting){links.forEach(function(a){a.classList.remove("on");});var a=map[e.target.id];if(a)a.classList.add("on");}
+    });},{rootMargin:"-20% 0px -70% 0px"});
+    Object.keys(map).forEach(function(id){var el=$(id);if(el)io.observe(el);});
+  }
+
+  // 表の各セルに見出しの名前を付ける(スマホのカード表示で使う)
+  [].forEach.call(document.querySelectorAll(".table-wrap table"),function(t){
+    var head=[].map.call(t.rows[0].cells,function(c){return c.textContent.trim();});
+    [].slice.call(t.rows,1).forEach(function(r){[].forEach.call(r.cells,function(c,i){if(head[i])c.setAttribute("data-label",head[i]);});});
+  });
+
+  // 最新版の表示
+  var raw="https://raw.githubusercontent.com/"+C.repo+"/main/";
+  var ver=$("ver");
+  fetch(raw+"version.json",{cache:"no-store"}).then(function(r){return r.json();}).then(function(j){
+    ver.textContent="最新版: v"+j.version+(j.date?"("+j.date+")":"");
+    var n=$("notes");
+    if(n&&j.notes){n.innerHTML='<p class="note"><b class="lb">最新版の更新内容(v'+esc(j.version)+')</b>'+esc([].concat(j.notes).join("\n")).replace(/\n/g,"<br>")+'</p>';}
+  }).catch(function(){ver.textContent="";});
+
+  // ダウンロード(そのままだと GitHub が画面に文字を表示してしまうので、ファイルとして保存させる)
+  var dl=$("dl"),fallback="https://github.com/"+C.repo+"/raw/main/"+C.file;
+  dl.addEventListener("click",function(ev){
+    ev.preventDefault();
+    fetch(raw+C.file,{cache:"no-store"}).then(function(r){if(!r.ok)throw 0;return r.blob();}).then(function(b){
+      var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=C.file;document.body.appendChild(a);a.click();
+      setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},1000);
+    }).catch(function(){location.href=fallback;});
+  });
+
+  // 更新履歴(changelog.json から。日付ごとにまとめ、新しい日だけ開く)
+  var box=$("cl");
+  if(box&&C.changelog){
+    fetch(C.changelog,{cache:"no-store"}).then(function(r){if(!r.ok)throw 0;return r.json();}).then(function(data){
+      var list=Array.isArray(data)?data:(data.releases||[]),days=[],idx={};
+      list.forEach(function(r){var d=r.date||"";if(!(d in idx)){idx[d]=days.length;days.push({date:d,rel:[]});}days[idx[d]].rel.push(r);});
+      box.innerHTML=days.map(function(day,i){
+        var v=day.rel.map(function(r){return "v"+r.version;});
+        var vr=v.length>1?v[v.length-1]+"〜"+v[0]:v[0];
+        var items=[];
+        day.rel.forEach(function(r){
+          var tags=(r.tags||[]).map(function(t){return '<span class="tag">'+esc(t)+'</span>';}).join("");
+          [].concat(r.notes||[]).forEach(function(n,j){items.push("<li>"+(j===0?tags:"")+esc(n)+"</li>");});
+        });
+        var head='<span class="d">'+esc(day.date)+'</span><span class="vr">'+esc(vr)+'</span>'+(i===0?'<span class="new">最新</span>':"");
+        return i===0?'<div class="day">'+head+"<ul>"+items.join("")+"</ul></div>"
+                    :'<details class="day"><summary>'+head+"</summary><ul>"+items.join("")+"</ul></details>";
+      }).join("");
+    }).catch(function(){
+      box.innerHTML='<p>読み込めませんでした。<a href="https://github.com/'+C.repo+'/blob/main/'+C.changelogPath+'">GitHub の更新履歴</a>をご覧ください。</p>';
+    });
+  }
+})();
 </script>
 </body>
 </html>
