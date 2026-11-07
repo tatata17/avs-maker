@@ -254,11 +254,14 @@ footer{border-top:1px solid var(--line);margin-top:60px;padding:22px 0;color:var
 <tr><td>tkinterdnd2 <small class="muted">(任意)</small></td><td>ドラッグ&amp;ドロップ</td><td><code>pip install tkinterdnd2</code>(なくても「ファイルを追加…」で使える)</td></tr>
 <tr><td>AviSynth Neo</td><td>通常の処理(KFMDeint・CUDA)</td><td><a href="https://github.com/nekopanda/AviSynthPlus/releases" target="_blank" rel="noopener">nekopanda/AviSynthPlus</a> をインストール。KFMDeint は <a href="https://github.com/nekopanda/AviSynthCUDAFilters/releases" target="_blank" rel="noopener">AviSynthCUDAFilters</a></td></tr>
 <tr><td>AviSynth+ 3.7.5 の avisynth.dll</td><td>24p 化(QTGMC＋SRestore)</td><td><a href="https://github.com/AviSynth/AviSynthPlus/releases/tag/v3.7.5" target="_blank" rel="noopener">AviSynth+ v3.7.5</a> の filesonly 版から取り出す。<strong>インストールせず</strong>、24p 用 ffmpeg と同じフォルダに置く</td></tr>
-<tr><td>ffmpeg(2つ)</td><td>プレビュー・エンコード</td><td><a href="https://www.gyan.dev/ffmpeg/builds/" target="_blank" rel="noopener">gyan.dev</a> の <strong>full</strong> 版(avisynth に対応)。zip の <code>bin</code> の <code>ffmpeg.exe</code>・<code>ffprobe.exe</code> を使う。通常用と 24p 用の2組</td></tr>
+<tr><td>ffmpeg(2つ)</td><td>プレビュー・エンコード</td><td><a href="https://www.gyan.dev/ffmpeg/builds/" target="_blank" rel="noopener">gyan.dev</a> の <strong>full</strong> 版(avisynth に対応)。展開した <code>bin</code> の <code>ffmpeg.exe</code>・<code>ffprobe.exe</code> を使う。通常用と 24p 用の2組(入れかたは下の「ffmpeg の入れかた」)</td></tr>
 <tr><td>NVIDIA の GPU とドライバ</td><td>HEVC(NVENC)エンコード</td><td><a href="https://www.nvidia.com/ja-jp/drivers/" target="_blank" rel="noopener">NVIDIA のドライバ</a>。新しい ffmpeg は 610 以降が必要</td></tr>
 </table></div>
 <p>Pillow などが入っていなくてもツールは起動しますが、その機能だけ使えなくなります。<code>pip</code> のコマンドは、スタートメニューの「コマンドプロンプト」に入力します。</p>
 <div class="note"><b class="lb">Python のインストーラーで外さないもの</b>「tcl/tk and IDLE」のチェックは外さないでください(ツールの画面の表示に使います)。初期のままなら入っています。</div>
+<h3>ffmpeg の入れかた</h3>
+<p>ffmpeg は「full」版を使います。avs-maker は PATH を<b>使いません</b>。ツールの画面で <code>ffmpeg.exe</code> の場所を選びます(通常用と 24p 用の2つ。くわしくは「02 はじめての準備」の 2-2)。</p>
+<details class="fold"><summary>ffmpeg を入れる手順</summary><ol><li><a href="https://www.gyan.dev/ffmpeg/builds/" target="_blank" rel="noopener">gyan.dev の ffmpeg ビルド</a>から「release builds」の <code>ffmpeg-release-full.7z</code> をダウンロードします(<code>.7z</code> は、7-Zip などで展開します)。</li><li>展開した <code>bin</code> フォルダの中の <code>ffmpeg.exe</code> と <code>ffprobe.exe</code> を使います。</li><li>通常用と 24p 用に、別々のフォルダへ2組コピーします(例: <code>C:\ffmpeg\neo</code> と <code>C:\ffmpeg\avs375</code>)。24p 用のフォルダには、AviSynth+ 3.7.5 の <code>avisynth.dll</code> も置きます(02 の 2-2 を見てください)。</li></ol></details>
 </section>
 
 <section id="setup">
