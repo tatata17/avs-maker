@@ -38,7 +38,7 @@ VHS などのアナログ取り込み動画から AviSynth のスクリプト（
 | tkinterdnd2 | ドラッグ＆ドロップ | `pip install tkinterdnd2`（なくても「ファイルを追加…」で使える） |
 | AviSynth Neo | 通常の処理（KFMDeint・CUDA） | [nekopanda/AviSynthPlus](https://github.com/nekopanda/AviSynthPlus/releases) をインストール。KFMDeint は [AviSynthCUDAFilters](https://github.com/nekopanda/AviSynthCUDAFilters/releases) |
 | AviSynth+ 3.7.5 の `avisynth.dll` | 24p 化（QTGMC＋SRestore） | [AviSynth+ v3.7.5](https://github.com/AviSynth/AviSynthPlus/releases/tag/v3.7.5) の filesonly 版から取り出す。**インストールせず**、24p 用 ffmpeg と同じフォルダに置く |
-| ffmpeg（2つ） | プレビュー・エンコード | [gyan.dev](https://www.gyan.dev/ffmpeg/builds/) の **full** 版（avisynth に対応）。zip の `bin` の `ffmpeg.exe`・`ffprobe.exe` を使う。通常用と 24p 用の2組 |
+| ffmpeg（2つ） | プレビュー・エンコード | [gyan.dev](https://www.gyan.dev/ffmpeg/builds/) の **full** 版（avisynth に対応）。zip の `bin` の `ffmpeg.exe`・`ffprobe.exe` を使う。ダウンロードは1つで、同じものを通常用と 24p 用の2つのフォルダにコピーして使う |
 | NVIDIA の GPU とドライバ | HEVC（NVENC）エンコード | [NVIDIA のドライバ](https://www.nvidia.com/ja-jp/drivers/)。新しい ffmpeg は 610 以降が必要 |
 
 Pillow などが入っていなくてもツールは起動しますが、その機能だけ使えなくなります。`pip` のコマンドは、スタートメニューの「コマンドプロンプト」に入力します。
@@ -62,6 +62,7 @@ ffmpeg は .avs を開くときに `avisynth.dll` を読み込みます。Window
 | 通常用ffmpeg（Neo） | `C:\ffmpeg\neo\ffmpeg.exe` | **置かない** | インストール済みの Neo |
 | 24p用ffmpeg（3.7.5） | `C:\ffmpeg\avs375\ffmpeg.exe` | AviSynth+ 3.7.5 のもの | 3.7.5 |
 
+- 2つの ffmpeg は、**中身が同じもの**で大丈夫です（1つダウンロードして、2つのフォルダにコピー）。違うのは、同じフォルダに `avisynth.dll` を置くかどうかだけです。
 - フォルダ名は例です。`neo` は通常用（AviSynth Neo）、`avs375` は 24p 用（AviSynth+ 3.7.5）の意味で付けています。2つが別のフォルダになっていれば、名前は自由です。
 - ffmpeg.exe の名前は変えても大丈夫です（例：`ffmpeg_neo.exe`）。欄で選んだファイルがそのまま使われます。
 - 通常用のフォルダに 3.7.5 の avisynth.dll があると、Neo 用の avs が 3.7.5 で開かれて「CUDA」のエラーになります（[困ったとき](#9-困ったとき)参照）。

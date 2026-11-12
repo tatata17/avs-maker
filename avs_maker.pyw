@@ -52,7 +52,7 @@ except Exception:
 HAS_PREVIEW = HAS_IMG and HAS_TKIMG
 
 APP_TITLE = "AVS かんたん作成ツール"
-APP_VERSION = "1.4.7"
+APP_VERSION = "1.4.8"
 
 # 更新の確認先（GitHub）。version.json に最新の版番号と変更内容、avs_maker.pyw に本体を置く
 UPDATE_REPO = "tatata17/avs-maker"
@@ -977,7 +977,7 @@ def build_script(path, o, cuts=None, nframes=0):
                 t = f"bob.Trim({2 * s_}, 0)"
             else:
                 t = f"bob.Trim({2 * s_}, {2 * e_ + 1})"
-            L.append(f"seg{i} = {t}" + (".Anime24()" if f else "") + (f"      # 24p化" if f else ""))
+            L.append(f"seg{i} = {t}" + (".Anime24()" if f else "") + ("      # 24p化" if f else ""))
             names.append(f"seg{i}")
         L += ["", " ++ ".join(names), ""]
     else:
@@ -2397,6 +2397,7 @@ class App:
         self.running = False
         self.cancel_flag = False
         self.proc = None
+        self.cur_tmp = None       # エンコード中の、途中のファイル名
         self.q = queue.Queue()
 
         self.build_ui()
@@ -4016,9 +4017,11 @@ class App:
         """共通の設定（ffmpegの場所など）と、一覧にある動画ごとの設定を保存する"""
         self._save_job = None
         data = self.options()        # 動画ごとの項目は「次に追加する動画の初期値」として残る
-        try:
-            with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+        try:      # 書いている途中で止まっても壊れないよう、別名で書いてから入れ替える
+            tmp = SETTINGS_FILE + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
+            os.replace(tmp, SETTINGS_FILE)
         except OSError:
             pass
         self.remember_files()
@@ -4029,6 +4032,14 @@ class App:
             if not messagebox.askyesno(APP_TITLE, "エンコード中です。中止して終了しますか？"):
                 return
             self.cancel_encode()
+            p, tmp = self.proc, getattr(self, "cur_tmp", None)
+            if p is not None:
+                try:
+                    p.wait(timeout=5)
+                except (subprocess.TimeoutExpired, OSError):
+                    pass
+            if tmp:
+                self._remove(tmp)
         self.save_settings()
         self.root.destroy()
 
@@ -4040,6 +4051,27 @@ class App:
         except Exception:
             messagebox.showinfo(APP_TITLE, f"ブラウザを開けませんでした。次のページを開いてください。\n{HELP_PAGE}")
 
+    def run_in_background(self, work, on_ok, on_error):
+        """時間のかかる work() を別スレッドで動かし、終わったら画面側のスレッドで on_ok(結果) か on_error(例外) を呼ぶ。
+        別スレッドから tkinter を直接さわると不安定になるので、結果を箱に入れておき、画面側が定期的に見に行く"""
+        box = []
+
+        def runner():
+            try:
+                box.append((True, work()))
+            except Exception as e:
+                box.append((False, e))
+
+        def poll():
+            if not box:
+                self.root.after(100, poll)
+                return
+            ok, value = box[0]
+            (on_ok if ok else on_error)(value)
+
+        threading.Thread(target=runner, daemon=True).start()
+        self.root.after(100, poll)
+
     def check_update(self):
         if self.running:
             messagebox.showinfo(APP_TITLE, "エンコード中は更新できません。終わってから押してください。")
@@ -4048,16 +4080,13 @@ class App:
         self.status.config(text="更新を確認しています…")
 
         def work():
+            info = fetch_latest_info()
             try:
-                info = fetch_latest_info()
-                try:
-                    info["since"] = fetch_notes_since(APP_VERSION, info.get("_base"))   # 間の版の変更内容も見せる
-                except Exception:
-                    info["since"] = None
-                self.root.after(0, lambda: self._update_found(info))
-            except Exception as e:
-                self.root.after(0, lambda e=e: self._update_failed(e))
-        threading.Thread(target=work, daemon=True).start()
+                info["since"] = fetch_notes_since(APP_VERSION, info.get("_base"))   # 間の版の変更内容も見せる
+            except Exception:
+                info["since"] = None
+            return info
+        self.run_in_background(work, self._update_found, self._update_failed)
 
     def _update_failed(self, e):
         self.b_update.config(state="normal")
@@ -4102,13 +4131,8 @@ class App:
         self.b_update.config(state="disabled")
         self.status.config(text=f"v{latest} をダウンロードしています…")
 
-        def work():
-            try:
-                data = download_new_version(latest, info.get("_base") or UPDATE_RAW)
-                self.root.after(0, lambda: self._update_install(data, latest))
-            except Exception as e:
-                self.root.after(0, lambda e=e: self._update_failed(e))
-        threading.Thread(target=work, daemon=True).start()
+        self.run_in_background(lambda: download_new_version(latest, info.get("_base") or UPDATE_RAW),
+                               lambda data: self._update_install(data, latest), self._update_failed)
 
     def _update_install(self, data, latest):
         try:
@@ -4122,7 +4146,6 @@ class App:
         if messagebox.askyesno(APP_TITLE, f"v{latest} に更新しました。\n"
                                           f"（前の版は {os.path.basename(backup)} に残してあります）\n\n"
                                           "今すぐ再起動しますか？"):
-            import sys
             try:
                 subprocess.Popen([sys.executable, os.path.abspath(__file__)],
                                  cwd=os.path.dirname(os.path.abspath(__file__)))
@@ -4287,12 +4310,23 @@ class App:
 
             ff = ffs[part["flag"]]
             cmd = []
+            # 途中のファイル名でエンコードし、成功したときだけ本来の名前にする
+            # （失敗や中止のときに、前からあった同じ名前の mp4 を壊さない・消さないため）
+            tmp = os.path.splitext(mp4)[0] + ".part.mp4"
+            self.cur_tmp = tmp
             try:
-                cmd = build_ffmpeg_cmd(ff, part["avs"], mp4,
+                cmd = build_ffmpeg_cmd(ff, part["avs"], tmp,
                                        dict(item.get("o", o), uhq=(ff not in no_uhq)))
                 code, lines = run_ffmpeg(cmd, part["total"], on_prog, self._set_proc)
             except Exception as e:
                 code, lines = -1, [str(e)]
+            if code == 0 and not self.cancel_flag:
+                try:
+                    os.replace(tmp, mp4)
+                except OSError as e:      # 前の mp4 を再生ソフトで開いたまま、など
+                    code, lines = -1, [f"エンコードは終わりましたが、{os.path.basename(mp4)} に名前を変えられませんでした（{e}）。",
+                                       f"できあがったファイルは {os.path.basename(tmp)} として残してあります。"]
+                    tmp = None            # 消さずに残す
             if self.cancel_flag:
                 results.append((name, "中止", ""))
                 code = None
@@ -4309,8 +4343,9 @@ class App:
                     note = ""
                 detail = "\n".join(lines[-6:]) if lines else "ffmpegがエラーメッセージを出さずに終了しました"
                 results.append((name, "失敗", f"{exit_code_text(code)}\n{detail}{note}"))
-            if code != 0:       # 途中までのファイルは残さない
-                self._remove(mp4)
+            if code != 0 and tmp:       # 途中までのファイルは残さない
+                self._remove(tmp)
+            self.cur_tmp = None
         self.q.put(("done", results))
 
     @staticmethod
@@ -4355,6 +4390,7 @@ class App:
     def finish_encode(self, results):
         self.running = False
         self.proc = None
+        self.cur_tmp = None
         self.b_enc.config(state="normal")
         self.b_avs.config(state="normal")
         self.b_cancel.config(state="disabled")
