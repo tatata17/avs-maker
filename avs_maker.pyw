@@ -1455,6 +1455,13 @@ class UpdateMismatch(Exception):
     """version.json と本体の版番号が食い違う（公開した直後で、配信が追いついていないとき）"""
 
 
+class UpdateBroken(Exception):
+    """ダウンロードした本体が、配布元の記録（SHA-256）と合わない・小さすぎる（壊れている可能性があるとき）"""
+
+
+UPDATE_MIN_SIZE = 100_000     # これより小さい本体は、壊れているとみなして受け付けない（tools/release.py と同じ下限）
+
+
 def fetch_latest_commit():
     """main の最新コミットの番号（sha）を返す。調べられなければ None"""
     try:
@@ -1493,15 +1500,37 @@ def fetch_notes_since(current, base=None):
     return out
 
 
-def download_new_version(expected_version, base=UPDATE_RAW):
-    """新しい avs_maker.pyw を取ってきて、プログラムとして正しく読めるか確かめてから返す（bytes）"""
+def download_new_version(expected_version, base=UPDATE_RAW, sha256=""):
+    """新しい avs_maker.pyw を取ってきて、壊れていないか確かめてから返す（bytes。改行を LF にそろえた中身）
+    sha256 は version.json に書いてある値。無い・空のとき（sha256 を付ける前の公開のしかた）は、照合せずに通す"""
     data = _http_get(base + "avs_maker.pyw", timeout=60)
-    text = data.decode("utf-8")
-    compile(text, "avs_maker.pyw", "exec")             # 壊れたファイルなら、ここでエラーになる
-    m = re.search(r'^APP_VERSION\s*=\s*"([^"]+)"', text, re.M)
-    if not m or _version_tuple(m.group(1)) != _version_tuple(expected_version):
+    # 改行を LF にそろえる。SHA-256 はこの形で計算し（tools/release.py と同じ計算。改行コードの違いだけで
+    # 更新が止まらないように）、保存もこの形でする（改行が二重にならないように）
+    data = data.replace(b"\r\n", b"\n")
+    # 先に版番号を見る：別の版が返ってきたのなら「配信が追いついていない」で、壊れているわけではない
+    m = re.search(r'^APP_VERSION\s*=\s*"([^"]+)"', data.decode("utf-8", "replace"), re.M)
+    if m and _version_tuple(m.group(1)) != _version_tuple(expected_version):
         raise UpdateMismatch("ダウンロードしたファイルの版番号が、案内された版と一致しません。"
-                         "少し時間をおいてから、もう一度お試しください。")
+                             "少し時間をおいてから、もう一度お試しください。")
+    expected = str(sha256 or "").strip().lower()
+    if expected:
+        # 配布ファイルが途中で壊れたり、書き換わったりしていないかを確かめる
+        if hashlib.sha256(data).hexdigest() != expected:
+            raise UpdateBroken("ダウンロードしたファイルが、配布元の記録（SHA-256）と一致しません。\n"
+                               "ファイルが途中で壊れた可能性があります。\n\n"
+                               "少し時間をおいてから、もう一度「更新を確認」を押してください。\n"
+                               "何度やっても同じときは、「使い方」のページから新しいファイルを入れ直してください。")
+    if len(data) < UPDATE_MIN_SIZE:
+        raise UpdateBroken("ダウンロードしたファイルが小さすぎます（壊れている可能性があります）。\n"
+                           "少し時間をおいてから、もう一度「更新を確認」を押してください。")
+    try:
+        compile(data.decode("utf-8"), "avs_maker.pyw", "exec")     # 壊れたファイルなら、ここでエラーになる
+    except (UnicodeDecodeError, SyntaxError, ValueError) as e:
+        raise UpdateBroken("ダウンロードしたファイルを、プログラムとして読めませんでした（壊れている可能性があります）。\n"
+                           f"少し時間をおいてから、もう一度「更新を確認」を押してください。\n\n{e}")
+    if not m:
+        raise UpdateMismatch("ダウンロードしたファイルの版番号が、案内された版と一致しません。"
+                             "少し時間をおいてから、もう一度お試しください。")
     return data
 
 
@@ -4096,6 +4125,9 @@ class App:
                                               "新しい版を公開した直後で、GitHub の配信がまだ追いついていないようです。\n"
                                               "数分おいてから、もう一度「更新を確認」を押してください。")
             return
+        if isinstance(e, UpdateBroken):       # ファイルが壊れている可能性（今の版には何もしていない）
+            messagebox.showwarning(APP_TITLE, f"更新できませんでした（今の版のままです）。\n\n{e}")
+            return
         messagebox.showwarning(APP_TITLE, "更新を確認できませんでした。\n"
                                           "インターネットにつながっているか確認してください。\n\n"
                                           f"{e}")
@@ -4131,7 +4163,8 @@ class App:
         self.b_update.config(state="disabled")
         self.status.config(text=f"v{latest} をダウンロードしています…")
 
-        self.run_in_background(lambda: download_new_version(latest, info.get("_base") or UPDATE_RAW),
+        self.run_in_background(lambda: download_new_version(latest, info.get("_base") or UPDATE_RAW,
+                                                            info.get("sha256")),
                                lambda data: self._update_install(data, latest), self._update_failed)
 
     def _update_install(self, data, latest):

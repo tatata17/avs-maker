@@ -280,12 +280,21 @@ ffmpeg のエラーで失敗したときは、mp4 と同じ場所に `〇〇_ffm
 | ファイル | 内容 |
 |---|---|
 | `avs_maker.pyw` | ツール本体。`APP_VERSION` が版番号 |
-| `version.json` | 最新の版番号と変更内容（更新ボタンが読みに来る） |
+| `version.json` | 最新の版番号・変更内容と、本体の SHA-256（更新ボタンが読みに来る。ダウンロードした本体が壊れていないかの照合にも使う） |
 | `changelog.json` | 更新履歴（すべての版の変更内容。使い方のページの「更新履歴」に表示） |
 | `README.md` | この説明 |
 | `docs/index.html` | 使い方のページ（GitHub Pages で公開） |
+| `tools/release.py` | 公開用。`version.json` と `changelog.json` をまとめて書く |
 
-新しい版を出すときは、`avs_maker.pyw` の `APP_VERSION` と `version.json` の `version` を同じ番号に上げ、`changelog.json` のいちばん上に、その版の内容を追加します。
+新しい版を出すときは、`avs_maker.pyw` の `APP_VERSION` を上げてから、次を実行します。`version.json` と `changelog.json` は手で書きません。
+
+```
+python tools/release.py "更新内容のひとこと"
+python tools/release.py "1つめの内容" "2つめの内容"
+```
+
+- `version.json`（版番号・日付・SHA-256・変更内容）と `changelog.json`（いちばん上にその版を追加）を、同じ内容で一度に書きます。
+- 構文エラーがある・版番号が上がっていない・本体が小さすぎるときは、何も書かずに止まります。
 
 ### ツールのフォルダに自動で作られるもの
 | ファイル | 内容 |
